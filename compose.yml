@@ -1,22 +1,27 @@
 services:
-  events-db:
-    image: 'postgres:18-alpine'
-    container_name: events-db
+  todo-db:
+    image: postgres:18-alpine
+    container_name: todo-db
     environment:
-      POSTGRES_DB: ruby_spring
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_USER: postgres
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     ports:
-      - '5423:5432'
+      - "${POSTGRES_PORT:-5423}:5432"
     volumes:
-      - events-pg-volume:/var/lib/postgresql
+      # Postgres 18 images keep data under /var/lib/postgresql/18/docker, so mount the parent
+      - todo-pg-data:/var/lib/postgresql
+      # Runs only when the data volume is empty; reset with `docker compose down -v`
+      - ./db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres -d events" ]
-      start_period: 30s
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
     deploy:
       resources:
         limits:
           memory: 700m
 
 volumes:
-  events-pg-volume:
+  todo-pg-data:

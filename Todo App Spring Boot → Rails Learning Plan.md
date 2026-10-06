@@ -58,9 +58,9 @@ Phase 1 ends when both apps boot, connect to the same Postgres 18 container, and
 
 *As a developer, I want one Postgres 18 instance in Docker so both apps use the same database engine with no local install.*
 
-- [ ] `compose.yaml` runs `postgres:18` with a named volume and a healthcheck
-- [ ] Two databases created by an init script: `todo_spring` and `todo_rails_development` (+ `todo_rails_test`)
-- [ ] Credentials come from environment variables, never committed
+- [x] `compose.yaml` runs `postgres:18` with a named volume and a healthcheck
+- [x] Two databases created by an init script: `todo_spring` and `todo_rails_development` (+ `todo_rails_test`)
+- [x] Credentials come from environment variables, never committed
 
 ### US-1.2 Spring Boot skeleton
 
