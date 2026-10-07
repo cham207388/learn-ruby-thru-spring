@@ -163,6 +163,9 @@ rails-health: ## Call /up
 
 rails-check: rails-test rails-lint rails-security ## Tests, lint and security scans
 
+ruby-drill: ## Run the Ruby drill
+	ruby ./playground/irb_drill.rb
+
 ## ---------- API (APP=spring|rails, ID=, BODY=, QUERY=) ----------
 
 api-create: ## POST /api/todos with BODY

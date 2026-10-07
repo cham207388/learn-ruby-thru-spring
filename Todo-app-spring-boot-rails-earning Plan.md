@@ -277,7 +277,7 @@ Run `irb`. Type each line. Predict the result before you press Enter.
 
 | # | Type this | Expect | Java analogue / lesson |
 | --- | --- | --- | --- |
-| 1 | `5.class`, `nil.class`, `5.even?` | `Integer`, `NilClass`, `true` | Everything is an object. No primitives. |
+| 1 | `5.class`, `nil.class`, `5.even?` | `Integer`, `NilClass`, `false` (5 is odd) | Everything is an object. No primitives. |
 | 2 | `name = "todo"` then `"Hi #{name.upcase}"` and `'Hi #{name}'` | `"Hi TODO"`, `"Hi \#{name}"` | Double quotes interpolate; single quotes do not. |
 | 3 | `:title.object_id == :title.object_id` and same with `"title"` | `true`, `false` | A symbol is one interned name. Rails uses symbols for keys, options and method names. |
 | 4 | `todo = { title: "Buy milk", completed: false }` then `todo[:title]`, `todo["title"]` | `"Buy milk"`, `nil` | Symbol key and string key differ. Common bug. Rails `params` accept both. |
