@@ -9,6 +9,8 @@ Build the same Todo REST API twice, Spring Boot first and Rails second, story by
 
 **Rails track is hand-built:** every Rails step says what to do, why, and how to check it. Type the code yourself; snippets show new syntax, not finished solutions. Run commands from `rails-todo/` unless a step says repo root.
 
+**Validate every story:** each story ends with a **Validate** table: commands and the result to expect. Commands use the root `Makefile`; run `make` to list all targets. API targets take `APP=spring` (port 8081, default) or `APP=rails` (port 3000).
+
 **Scope decision:** both apps are JSON APIs so the comparison stays apples-to-apples. Each CRUD story has an optional Rails stretch (HTML views with Hotwire) because that is where Rails differs most from Spring.
 
 **Tech stack (as of Oct 2026)**
@@ -62,7 +64,7 @@ Most Spring concepts have a direct Rails counterpart; the big shift is from expl
 <details>
 <summary><span style="font-weight: bold; color: cyan;"><b>Phase 1: Setup</b></span></summary>
 
-Phase 1 ends when both apps boot, connect to the same Postgres 18 container, and pass one smoke test each. Repo layout: one monorepo with `spring-todo/`, `rails-todo/`, `compose.yml`, and `requests.http` at the root.
+Phase 1 ends when both apps boot, connect to the same Postgres 18 container, and pass one smoke test each. Repo layout: one monorepo with `spring-todo/`, `rails-todo/`, `compose.yml`, `Makefile` and `requests.http` at the root.
 
 <details>
 <summary><span style="font-weight: bold; color: green;"><b>US-1.1 Shared database</b></span></summary>
@@ -72,6 +74,22 @@ Phase 1 ends when both apps boot, connect to the same Postgres 18 container, and
 - [x] `compose.yml` runs `postgres:18` with a named volume and a healthcheck
 - [x] Two databases created by an init script: `todo_spring` and `todo_rails_development` (+ `todo_rails_test`)
 - [x] Credentials come from environment variables, never committed
+
+**Validate**
+
+Run from repo root.
+
+| # | Command | Expect |
+| --- | --- | --- |
+| 1 | `make compose-up` | `Container todo-db Healthy` |
+| 2 | `make compose-ps` | STATUS `Up ... (healthy)`, ports `5423->5432` |
+| 3 | `make db-version` | `PostgreSQL 18.x` |
+| 4 | `make db-list` | `todo`, `todo_rails_development`, `todo_rails_test`, `todo_spring` |
+| 5 | `grep -n PASSWORD compose.yml` | only `${POSTGRES_PASSWORD:?...}`, no literal password |
+| 6 | `git check-ignore .env` | prints `.env`: ignored, never committed |
+| 7 | `git ls-files .env.example` | prints `.env.example`: the template is committed |
+
+- The init script runs only on an empty data volume. If step 4 misses a database, run `make compose-reset`. **Warning:** it deletes all data in the container.
 
 </details>
 
@@ -87,6 +105,24 @@ Phase 1 ends when both apps boot, connect to the same Postgres 18 container, and
 - [x] `spring.jpa.hibernate.ddl-auto=validate` (Flyway owns the schema) and `spring.jpa.open-in-view=false`
 - [x] Single feature package: entity, repository, service, controller and DTOs live directly in `com.example.todo`, next to the application class
 - [x] Spotless configured; `./gradlew build` passes; `/actuator/health` returns UP
+
+**Validate**
+
+Run from repo root.
+
+| # | Command | Expect |
+| --- | --- | --- |
+| 1 | `make compose-up` | `Container todo-db Healthy` |
+| 2 | `make spring-clean spring-build` | `BUILD SUCCESSFUL`. `clean` forces tests and `spotlessCheck` to run again instead of `up-to-date` |
+| 3 | `make spring-lint` | `BUILD SUCCESSFUL` |
+| 4 | `grep -n languageVersion spring-todo/build.gradle.kts` | `JavaLanguageVersion.of(25)` |
+| 5 | `grep -nE 'ddl-auto\|open-in-view' spring-todo/src/main/resources/application.yaml` | `open-in-view: false`, `ddl-auto: validate` |
+| 6 | `ls spring-todo/src/main/java/com/example/todo` | `SpringTodoApplication.java` only, no sub-packages |
+| 7 | `make spring-run` (terminal 1) | log has `Database: jdbc:postgresql://localhost:5423/todo_spring` and `Started SpringTodoApplication` |
+| 8 | `make spring-health` (terminal 2) | `{"groups":["liveness","readiness"],"status":"UP"}` |
+
+- Stop the app with `Ctrl-C` in terminal 1.
+- Step 2 tests use Testcontainers, so Docker must run. They do not use the compose container.
 
 </details>
 
@@ -213,6 +249,21 @@ Done when you can read `validates :title, presence: true, length: { maximum: 200
 - [ ] `gem -v` and `bundle -v` show 4.x; `rails -v` shows 8.1.x
 - [ ] libpq present
 - [ ] irb drill done; one note in `LEARNINGS.md`
+
+**Validate**
+
+Run from repo root.
+
+| # | Command | Expect |
+| --- | --- | --- |
+| 1 | `make tools-check` | mise `2026.x`, java `25`, ruby `4.0.7` from `~/.local/share/mise/installs/`, gem and bundler `4.x`, `Rails 8.1.4`, libpq `ok`, docker present |
+| 2 | `mise doctor \| grep activated` | `activated: yes` |
+| 3 | `cat mise.toml` | `ruby = "4.0.7"` and `_.file = ".env"` |
+| 4 | `echo $POSTGRES_USER` | `todo` |
+| 5 | `cd ~ && echo "[$POSTGRES_USER]"; cd -` | `[]`: vars load only inside the repo |
+| 6 | `git ls-files mise.toml` | `mise.toml` |
+
+- Make targets load `.env` on their own. Steps 4 and 5 check mise, which you need when you run `bin/rails` directly.
 
 </details>
 
@@ -381,6 +432,24 @@ git commit -m "US-1.4 Rails skeleton"
 
 **What to notice:** Rails generated a health check, lint, security scans and CI config without asking. `Gemfile` vs `build.gradle.kts`: no plugins, no tasks, only dependencies; tasks live in `bin/rails`. Run `bin/rails -T` to list them, like `./gradlew tasks`.
 
+**Validate**
+
+Run from repo root.
+
+| # | Command | Expect |
+| --- | --- | --- |
+| 1 | `test -d rails-todo/.git && echo NESTED \|\| echo ok` | `ok` |
+| 2 | `git ls-files rails-todo \| head -3` | file paths inside `rails-todo/` (after the Step 10 commit) |
+| 3 | `cat rails-todo/.ruby-version` | `ruby-4.0.7` |
+| 4 | `make compose-up rails-db-prepare` | no error |
+| 5 | `make rails-db` | `todo_rails_development` |
+| 6 | `make rails-test` | `1 runs, 1 assertions, 0 failures, 0 errors` |
+| 7 | `make rails-run` (terminal 1) | `Listening on http://127.0.0.1:3000` |
+| 8 | `make rails-health` (terminal 2) | `GET /up -> 200` |
+| 9 | `make rails-lint` | `no offenses detected` |
+| 10 | `make rails-security` | Brakeman `No warnings found`; bundler-audit `No vulnerabilities found` |
+| 11 | `cat LEARNINGS.md` | one line per row of the folder map |
+
 </details>
 
 ---
@@ -476,6 +545,35 @@ bin/rails db:migrate
 - [ ] Migration has `null: false`, `limit: 200`, `default: false`, `t.timestamps`
 - [ ] `\d todos` matches the spec (except `bigserial`)
 - [ ] Rollback and re-migrate practiced; `db/schema.rb` committed
+
+**Validate**
+
+Run from repo root with the container up (`make compose-up`).
+
+**Spring**
+
+| # | Command | Expect |
+| --- | --- | --- |
+| 1 | `make spring-run`, then `Ctrl-C` after start | first run logs `Migrating schema "public" to version "1 - create todos"` |
+| 2 | `make db-flyway-history` | one row: `1 \| create todos \| t` |
+| 3 | `make db-todos-spring` | columns match the spec; `id` is `generated ... as identity` |
+
+**Rails**
+
+| # | Command | Expect |
+| --- | --- | --- |
+| 4 | `make rails-db-migrate` | `== CreateTodos: migrated` (or nothing when already up) |
+| 5 | `make rails-db-status` | `up` next to `Create todos` |
+| 6 | `make db-todos-rails` | columns match the spec; timestamps are `timestamp with time zone` |
+| 7 | `make rails-db-rollback rails-db-status` | `down` |
+| 8 | `make rails-db-migrate rails-db-status` | `up` again |
+| 9 | `git ls-files rails-todo/db/schema.rb` | `rails-todo/db/schema.rb` |
+
+**Both**
+
+| # | Command | Expect |
+| --- | --- | --- |
+| 10 | `make db-compare` | same column names, types and nullability in both DBs; `title` max length 200; only the `id` default differs (identity vs `nextval`) |
 
 </details>
 
@@ -575,6 +673,21 @@ bin/rails test
 - [ ] Fixtures and model tests pass; `bin/rubocop` clean
 
 **What to notice:** the Rails model has no fields. Active Record reads columns from Postgres at boot. Validation and persistence live in one class; Spring splits them across entity, repository and DTO. The console against your live model has no real Spring equivalent and will speed up every later story.
+
+**Validate**
+
+Run from repo root with the container up.
+
+| # | Command | Expect |
+| --- | --- | --- |
+| 1 | `make spring-clean spring-build` | `BUILD SUCCESSFUL`; repository test included |
+| 2 | `make spring-run`, then `Ctrl-C` after start | starts with no `Schema-validation` error: entity matches the Flyway table |
+| 3 | `make rails-test T=test/models/todo_test.rb` | `4 runs, 0 failures, 0 errors` |
+| 4 | `make rails-test` | `0 failures, 0 errors` |
+| 5 | `make rails-console`, then `Todo.new(title: " ").valid?` | `false` |
+| 6 | `make spring-lint rails-lint` | both clean |
+
+- Test report for Spring: `spring-todo/build/reports/tests/test/index.html`.
 
 </details>
 
@@ -720,6 +833,27 @@ body = response.parsed_body
 
 *Rails stretch:* add an HTML `new`/`create` with a form helper and Turbo, to see full-stack Rails.
 
+**Validate**
+
+**Automated**
+
+| # | Command | Expect |
+| --- | --- | --- |
+| 1 | `make spring-build` | `BUILD SUCCESSFUL`, create request tests included |
+| 2 | `make rails-check` | tests, RuboCop and security scans clean |
+| 3 | `make rails-routes` | `POST /api/todos` and `GET /api/todos/:id` |
+
+**Manual** — Start both apps first: `make spring-run` in terminal 1, `make rails-run` in terminal 2. Run the checks in terminal 3. Replace `<id>` with an id from a create response. Run each row with `APP=spring`, then `APP=rails`.
+
+| # | Command | Expect |
+| --- | --- | --- |
+| 4 | `make api-create APP=spring` | `201`, `Location: .../api/todos/<id>`, body has `id`, `completed: false`, `created_at`, `updated_at` |
+| 5 | `make api-create APP=spring BODY='{"title":""}'` | `422`, `Content-Type: application/problem+json`, `errors.title` |
+| 6 | `make api-create APP=spring BODY="{\"title\":\"$(printf 'a%.0s' {1..201})\"}"` | `422`, `errors.title` |
+| 7 | `make api-create APP=spring BODY='{"title":"x","id":999,"completed":true}'` | `201`, new id (not 999), `completed: false` |
+| 8 | `make api-shape` | same key list from both apps |
+| 9 | `make api-shape BODY='{"title":""}'` | same Problem Details keys from both apps |
+
 </details>
 
 ---
@@ -796,6 +930,28 @@ Todo.by_completed(true).to_a
 
 **What to notice:** scopes are chainable and lazy. Watch the SQL in the Rails log and use `.to_sql` in the console, the way you would turn on `show-sql` in Hibernate.
 
+**Validate**
+
+**Automated**
+
+| # | Command | Expect |
+| --- | --- | --- |
+| 1 | `make spring-build` | `BUILD SUCCESSFUL`, list and show tests included |
+| 2 | `make rails-check` | all clean |
+| 3 | `make rails-routes` | `GET /api/todos`, `GET /api/todos/:id`, `POST /api/todos` |
+
+**Manual** — Start both apps first: `make spring-run` in terminal 1, `make rails-run` in terminal 2. Run the checks in terminal 3. Replace `<id>` with an id from a create response. Create three todos per app first (`make api-create APP=...` three times). Run each row with `APP=spring`, then `APP=rails`.
+
+| # | Command | Expect |
+| --- | --- | --- |
+| 4 | `make api-list APP=spring` | `200`, newest first, `page: 1`, `size: 20`, `total` |
+| 5 | `make api-list APP=spring QUERY='completed=false'` | only todos with `completed: false` |
+| 6 | `make api-list APP=spring QUERY='page=2&size=1'` | one item (the second newest), `page: 2`, `size: 1` |
+| 7 | `make api-list APP=spring QUERY='size=500'` | `size: 100` |
+| 8 | `make api-get APP=spring ID=<id>` | `200`, that todo |
+| 9 | `make api-get APP=spring ID=999999` | `404`, `Content-Type: application/problem+json` |
+| 10 | `make api-list-shape` | same page keys and item keys from both apps |
+
 </details>
 
 ---
@@ -862,6 +1018,26 @@ todo.save
 
 **What to notice:** `before_action` handles cross-cutting code. Both stacks track changes: Hibernate dirty checking vs Active Record `changed?` / `saved_changes`.
 
+**Validate**
+
+**Automated**
+
+| # | Command | Expect |
+| --- | --- | --- |
+| 1 | `make spring-build` | `BUILD SUCCESSFUL`, update tests included |
+| 2 | `make rails-check` | all clean |
+| 3 | `make rails-routes` | `PATCH` and `PUT /api/todos/:id` |
+
+**Manual** — Start both apps first: `make spring-run` in terminal 1, `make rails-run` in terminal 2. Run the checks in terminal 3. Replace `<id>` with an id from a create response. Run each row with `APP=spring`, then `APP=rails`.
+
+| # | Command | Expect |
+| --- | --- | --- |
+| 4 | `make api-update APP=spring ID=<id> BODY='{"title":"Buy oat milk"}'` | `200`, new title, `description` unchanged, `updated_at` later than `created_at` |
+| 5 | `make api-update APP=spring ID=<id> BODY='{"completed":true}'` | `200`, `completed: true`, title unchanged |
+| 6 | `make api-update APP=spring ID=<id> BODY='{"title":""}'` | `422` Problem Details |
+| 7 | `make api-update APP=spring ID=999999` | `404` Problem Details |
+| 8 | `make api-get APP=spring ID=<id>` | changes from steps 4 and 5 persisted |
+
 </details>
 
 ---
@@ -908,6 +1084,26 @@ Todo.where(title: "b").delete_all
 
 **What to notice:** `resources :todos` now replaces five mapping annotations. Read the `bin/rails routes` table it generated.
 
+**Validate**
+
+**Automated**
+
+| # | Command | Expect |
+| --- | --- | --- |
+| 1 | `make spring-build` | `BUILD SUCCESSFUL`, delete tests included |
+| 2 | `make rails-check` | all clean |
+| 3 | `make rails-routes` | five actions in six lines (`PATCH` and `PUT` share `update`) |
+
+**Manual** — Start both apps first: `make spring-run` in terminal 1, `make rails-run` in terminal 2. Run the checks in terminal 3. Replace `<id>` with an id from a create response. Run each row with `APP=spring`, then `APP=rails`.
+
+| # | Command | Expect |
+| --- | --- | --- |
+| 4 | `make api-delete APP=spring ID=<id>` | `204`, empty body |
+| 5 | `make api-get APP=spring ID=<same id>` | `404` |
+| 6 | `make api-delete APP=spring ID=999999` | `404` Problem Details |
+
+**Phase 3 complete:** run `make check`. Both apps green means every story passes its tests, lint and scans.
+
 </details>
 
 </details>
@@ -926,6 +1122,8 @@ A story is done only when both tracks meet the same bar; this keeps the comparis
 - [ ] Schema changes only through a new migration, never by editing an applied one
 - [ ] Same request in `requests.http` returns the same status and JSON shape from both apps
 - [ ] One short note per story in `LEARNINGS.md`: what was easier, what was surprising
+
+**Validate the whole project:** `make compose-up check db-compare`. Then run `make api-shape` and `make api-list-shape` with both apps running.
 
 **Clean code conventions**
 
