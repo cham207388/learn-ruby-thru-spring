@@ -142,7 +142,8 @@ Run from repo root.
 
 Ruby and Rails are already on this machine. Verify each tool first; install only when a check fails.
 
-**Step 1: Check mise.**
+<details>
+<summary><span style="font-weight: bold; color: pink;"><b>Step 1: Check mise.</b></span></summary>
 
 ```bash
 mise --version
@@ -154,7 +155,12 @@ mise doctor
 - If `activated: no`: add `eval "$(mise activate zsh)"` to `~/.zshrc`, open a new terminal, run `mise doctor` again. Shims alone run the right Ruby, but they do not export the `[env]` vars from Step 4. Rails needs those vars.
 - If mise missing: `brew install mise`, then do the line above.
 
-**Step 2: Check Ruby.**
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: pink;"><b>Step 2: Check Ruby.</b></span></summary>
 
 ```bash
 ruby -v
@@ -165,7 +171,14 @@ which ruby
 - Path `/usr/bin/ruby` means macOS system Ruby (2.6). Do not use it: too old, and gem installs need `sudo`.
 - If missing: `mise use --global ruby@4.0`. First install compiles Ruby from source and takes several minutes.
 
-**Step 3: Pin Ruby for this repo.** From repo root, use the exact version that `ruby -v` printed:
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: pink;"><b>Step 3: Pin Ruby for this repo.</b></span></summary>
+
+From repo root, use the exact version that `ruby -v` printed:
 
 ```bash
 mise use ruby@4.0.7
@@ -176,15 +189,24 @@ cat mise.toml
 - Why: like `.sdkmanrc` or the Gradle toolchain block. Your global config says `4.0` (any patch); the project file wins inside this folder, so everyone gets the same patch.
 - Note: mise ignores `.ruby-version` by default. Rails generates `rails-todo/.ruby-version` in US-1.4 for Docker and CI. Keep both files on the same version.
 
-**Step 4: Load `.env` through mise.** Edit `mise.toml`:
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: pink;"><b>Step 4: Load `.env` through mise.</b></span></summary>
+
+Edit `mise.toml`:
 
 ```toml
 [tools]
 ruby = "4.0.7"
 
 [env]
-_.file = ".env"
+_ = { file = ".env" }
 ```
+
+- `_ = { file = ".env" }` is the same TOML as mise's documented `_.file = ".env"`. The inline-table form avoids false errors from older IDE TOML parsers.
 
 ```bash
 mise trust
@@ -195,7 +217,12 @@ echo $POSTGRES_USER
 - Why: Rails does not read `.env` on its own. Spring reads it through `spring.config.import`. mise exports the vars whenever your shell is in this repo, so `config/database.yml` can read `ENV["POSTGRES_USER"]`.
 - `mise trust` is needed once: mise refuses to run env config from an untrusted file.
 
-**Step 5: Check RubyGems and Bundler.**
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: pink;"><b>Step 5: Check RubyGems and Bundler.</b></span></summary>
 
 ```bash
 gem -v
@@ -206,7 +233,12 @@ bundle -v
 - Why: RubyGems is the package client (Maven Central role). Bundler resolves a project's `Gemfile` and writes `Gemfile.lock` (Gradle dependency resolution plus a lockfile).
 - If `bundle` missing: `gem install bundler`.
 
-**Step 6: Check Rails.**
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: pink;"><b>Step 6: Check Rails.</b></span></summary>
 
 ```bash
 rails -v
@@ -216,7 +248,12 @@ rails -v
 - If missing: `gem install rails -v "~> 8.1"`, then `mise reshim` so the new `rails` command is on PATH.
 - Why: the global `rails` command has one job here: `rails new`. Inside the app, always run `bin/rails`. It uses the Rails version locked in `Gemfile.lock`. Same idea as start.spring.io once, then `./gradlew` forever.
 
-**Step 7: Check the Postgres client library (libpq).**
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: pink;"><b>Step 7: Check the Postgres client library (libpq).</b></span></summary>
 
 ```bash
 brew list libpq > /dev/null && echo libpq ok
@@ -229,8 +266,14 @@ brew list libpq > /dev/null && echo libpq ok
 ```bash
 bundle config build.pg --with-pg-config=$(brew --prefix libpq)/bin/pg_config
 ```
+</details>
 
-**Step 8: irb drill (20 minutes).** Run `irb`. Type each line. Predict the result before you press Enter.
+---
+
+<details>
+<summary><span style="font-weight: bold; color: pink;"><b>Step 8: irb drill (20 minutes).</b></span></summary>
+
+Run `irb`. Type each line. Predict the result before you press Enter.
 
 | # | Type this | Expect | Java analogue / lesson |
 | --- | --- | --- | --- |
@@ -249,13 +292,22 @@ bundle config build.pg --with-pg-config=$(brew --prefix libpq)/bin/pg_config
 
 Done when you can read `validates :title, presence: true, length: { maximum: 200 }` and name every part: a method call (`validates`), a symbol argument (`:title`), keyword arguments (`presence:`, `length:`) and a nested hash. It is a method call that runs when the class loads, not an annotation.
 
-**Checklist**
+</details>
 
-- [ ] mise activated; `ruby -v` shows 4.0.x from mise
-- [ ] `mise.toml` pins Ruby and loads `.env`; `echo $POSTGRES_USER` works inside the repo; `mise.toml` committed
-- [ ] `gem -v` and `bundle -v` show 4.x; `rails -v` shows 8.1.x
-- [ ] libpq present
-- [ ] irb drill done; one note in `LEARNINGS.md`
+---
+
+<details>
+<summary><span style="font-weight: bold; color: pink;"><b>Checklist</b></span></summary>
+
+- [x] mise activated; `ruby -v` shows 4.0.x from mise
+- [x] `mise.toml` pins Ruby and loads `.env`; `echo $POSTGRES_USER` works inside the repo; `mise.toml` committed
+- [x] `gem -v` and `bundle -v` show 4.x; `rails -v` shows 8.1.x
+- [x] libpq present
+- [x] irb drill done; one note in `LEARNINGS.md`
+
+</details>
+
+---
 
 <details>
 <summary><span style="font-weight: bold; color: pink;"><b>Validate</b></span></summary>
@@ -266,7 +318,7 @@ Run from repo root.
 | --- | --- | --- |
 | 1 | `make tools-check` | mise `2026.x`, java `25`, ruby `4.0.7` from `~/.local/share/mise/installs/`, gem and bundler `4.x`, `Rails 8.1.4`, libpq `ok`, docker present |
 | 2 | `mise doctor \| grep activated` | `activated: yes` |
-| 3 | `cat mise.toml` | `ruby = "4.0.7"` and `_.file = ".env"` |
+| 3 | `cat mise.toml` | `ruby = "4.0.7"` and `_ = { file = ".env" }` |
 | 4 | `echo $POSTGRES_USER` | `todo` |
 | 5 | `cd ~ && echo "[$POSTGRES_USER]"; cd -` | `[]`: vars load only inside the repo |
 | 6 | `git ls-files mise.toml` | `mise.toml` |
