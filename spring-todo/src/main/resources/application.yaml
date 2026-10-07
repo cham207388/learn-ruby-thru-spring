@@ -1,3 +1,27 @@
 spring:
   application:
     name: spring-todo
+  # Shared Postgres credentials live in the repo-root .env (gitignored)
+  config:
+    import: optional:file:../.env[.properties]
+  docker:
+    compose:
+      file: ../compose.yml
+  datasource:
+    url: jdbc:postgresql://localhost:${POSTGRES_PORT:5423}/todo_spring
+    username: ${POSTGRES_USER:}
+    password: ${POSTGRES_PASSWORD:}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+
+server:
+  # 8080 is taken by another local container
+  port: 8081
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

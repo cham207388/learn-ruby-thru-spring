@@ -1,14 +1,13 @@
-package com.example.todo.springtodo;
+package com.example.todo;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 
+@Import(TestcontainersConfiguration.class)
 @SpringBootTest
 class SpringTodoApplicationTests {
 
     @Test
-    void contextLoads() {
-
-    }
-
+    void contextLoads() {}
 }

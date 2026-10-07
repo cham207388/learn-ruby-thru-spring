@@ -66,11 +66,11 @@ Phase 1 ends when both apps boot, connect to the same Postgres 18 container, and
 
 *As a developer, I want a Spring Boot 4.1 project on Java 25 and Gradle 9.6 so I have a known-good baseline.*
 
-- [ ] Generated from start.spring.io: Gradle Kotlin DSL, Java 25, dependencies Web, Data JPA, Validation, PostgreSQL Driver, Flyway, Actuator, Testcontainers, Docker Compose support
-- [ ] Java toolchain set to 25 in `build.gradle.kts`; dependency versions in `gradle/libs.versions.toml`
-- [ ] `spring.jpa.hibernate.ddl-auto=validate` (Flyway owns the schema) and `spring.jpa.open-in-view=false`
-- [ ] Package by feature: `com.example.todo.todo` holds entity, repository, service, controller, DTOs
-- [ ] Spotless configured; `./gradlew build` passes; `/actuator/health` returns UP
+- [x] Generated from start.spring.io: Gradle Kotlin DSL, Java 25, dependencies Web, Data JPA, Validation, PostgreSQL Driver, Flyway, Actuator, Testcontainers, Docker Compose support
+- [x] Java toolchain set to 25 in `build.gradle.kts`; dependency versions in `gradle/libs.versions.toml`
+- [x] `spring.jpa.hibernate.ddl-auto=validate` (Flyway owns the schema) and `spring.jpa.open-in-view=false`
+- [x] Single feature package: entity, repository, service, controller and DTOs live directly in `com.example.todo`, next to the application class
+- [x] Spotless configured; `./gradlew build` passes; `/actuator/health` returns UP
 
 ### US-1.3 Ruby toolchain
 
@@ -120,7 +120,7 @@ Phase 2 creates the `todos` table through a migration in each stack and maps it 
 
 ## Phase 3: CRUD user stories
 
-Build these four in order; each adds one new Rails idea on top of the last. Both apps expose the same contract under `/api/todos`, so `requests.http` tests either one by switching the port (Spring 8080, Rails 3000).
+Build these four in order; each adds one new Rails idea on top of the last. Both apps expose the same contract under `/api/todos`, so `requests.http` tests either one by switching the port (Spring 8081, Rails 3000).
 
 | Story | Method + path | Success | Errors |
 | --- | --- | --- | --- |
@@ -215,7 +215,7 @@ A story is done only when both tracks meet the same bar; this keeps the comparis
 
 **Clean code conventions**
 
-- Spring: package by feature, constructor injection only, Java records for DTOs, no entities in API responses, `@Transactional` at the service layer, `ProblemDetail` for errors, Testcontainers over H2
+- Spring: one flat `com.example.todo` package (split by feature only when a second feature arrives), constructor injection only, Java records for DTOs, no entities in API responses, `@Transactional` at the service layer, `ProblemDetail` for errors, Testcontainers over H2
 - Rails: follow the generators' naming (`Todo` model, `todos` table, `Api::TodosController`), skinny controllers, `params.expect` for strong parameters, `before_action` for shared lookups, `rescue_from` for errors, fixtures for test data, no service objects until a model method gets too big
 - Both: one commit per story per track, small focused PRs if you use GitHub, and a CI workflow (Rails generates one in `.github/workflows/ci.yml`; add the equivalent Gradle job)
 

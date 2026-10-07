@@ -1,4 +1,4 @@
-package com.example.todo.springtodo;
+package com.example.todo;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -10,5 +10,4 @@ public class SpringTodoApplication {
 
         SpringApplication.run(SpringTodoApplication.class, args);
     }
-
 }
