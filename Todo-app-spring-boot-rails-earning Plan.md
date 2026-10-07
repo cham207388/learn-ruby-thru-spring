@@ -546,11 +546,11 @@ git commit -m "US-1.4 Rails skeleton"
 
 **Checklist**
 
-- [ ] `rails new` with `--api --database=postgresql --skip-kamal`; nested `.git` removed
-- [ ] `database.yml` reads host, port, user and password from `ENV`; `bin/rails db:prepare` succeeds
-- [ ] Smoke test passes; `GET /up` returns 200
-- [ ] `bin/rubocop`, `bin/brakeman`, `bin/bundler-audit` clean
-- [ ] Folder map written in `LEARNINGS.md`
+- [x] `rails new` with `--api --database=postgresql --skip-kamal`; nested `.git` removed
+- [x] `database.yml` reads host, port, user and password from `ENV`; `bin/rails db:prepare` succeeds
+- [x] Smoke test passes; `GET /up` returns 200
+- [x] `bin/rubocop`, `bin/brakeman`, `bin/bundler-audit` clean
+- [x] Folder map written in `LEARNINGS.md`
 
 **What to notice:** Rails generated a health check, lint, security scans and CI config without asking. `Gemfile` vs `build.gradle.kts`: no plugins, no tasks, only dependencies; tasks live in `bin/rails`. Run `bin/rails -T` to list them, like `./gradlew tasks`.
 

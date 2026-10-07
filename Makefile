@@ -163,6 +163,9 @@ rails-health: ## Call /up
 
 rails-check: rails-test rails-lint rails-security ## Tests, lint and security scans
 
+rails-dep: rails-exists ## Deploy the app to the cloud
+	cd $(RAILS_DIR) && bin/rails -T
+
 ruby-drill: ## Run the Ruby drill
 	ruby ./playground/irb_drill.rb
 
