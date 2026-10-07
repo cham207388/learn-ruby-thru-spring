@@ -32,6 +32,7 @@ Pin exact patch versions on day one from [start.spring.io](https://start.spring.
 </details>
 
 ---
+
 <details>
 <summary><span style="font-weight: bold; color: cyan;">Concept map</span></summary>
 
@@ -143,7 +144,7 @@ Run from repo root.
 Ruby and Rails are already on this machine. Verify each tool first; install only when a check fails.
 
 <details>
-<summary><span style="font-weight: bold; color: pink;"><b>Step 1: Check mise.</b></span></summary>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 1: Check mise.</b></span></summary>
 
 ```bash
 mise --version
@@ -160,7 +161,7 @@ mise doctor
 ---
 
 <details>
-<summary><span style="font-weight: bold; color: pink;"><b>Step 2: Check Ruby.</b></span></summary>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 2: Check Ruby.</b></span></summary>
 
 ```bash
 ruby -v
@@ -176,7 +177,7 @@ which ruby
 ---
 
 <details>
-<summary><span style="font-weight: bold; color: pink;"><b>Step 3: Pin Ruby for this repo.</b></span></summary>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 3: Pin Ruby for this repo.</b></span></summary>
 
 From repo root, use the exact version that `ruby -v` printed:
 
@@ -194,7 +195,7 @@ cat mise.toml
 ---
 
 <details>
-<summary><span style="font-weight: bold; color: pink;"><b>Step 4: Load `.env` through mise.</b></span></summary>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 4: Load `.env` through mise.</b></span></summary>
 
 Edit `mise.toml`:
 
@@ -222,7 +223,7 @@ echo $POSTGRES_USER
 ---
 
 <details>
-<summary><span style="font-weight: bold; color: pink;"><b>Step 5: Check RubyGems and Bundler.</b></span></summary>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 5: Check RubyGems and Bundler.</b></span></summary>
 
 ```bash
 gem -v
@@ -238,7 +239,7 @@ bundle -v
 ---
 
 <details>
-<summary><span style="font-weight: bold; color: pink;"><b>Step 6: Check Rails.</b></span></summary>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 6: Check Rails.</b></span></summary>
 
 ```bash
 rails -v
@@ -253,7 +254,7 @@ rails -v
 ---
 
 <details>
-<summary><span style="font-weight: bold; color: pink;"><b>Step 7: Check the Postgres client library (libpq).</b></span></summary>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 7: Check the Postgres client library (libpq).</b></span></summary>
 
 ```bash
 brew list libpq > /dev/null && echo libpq ok
@@ -271,7 +272,7 @@ bundle config build.pg --with-pg-config=$(brew --prefix libpq)/bin/pg_config
 ---
 
 <details>
-<summary><span style="font-weight: bold; color: pink;"><b>Step 8: irb drill (20 minutes).</b></span></summary>
+<summary><span style="font-weight: bold; color:rgb(153, 184, 255);"><b>Step 8: irb drill (20 minutes).</b></span></summary>
 
 Run `irb`. Type each line. Predict the result before you press Enter.
 
@@ -336,18 +337,28 @@ Run from repo root.
 
 *As a developer, I want a Rails 8.1 API app on Postgres so I can compare it file by file with the Spring project.*
 
-**Step 1: Generate the app.** From repo root:
+<details>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 1: Generate the app.</b></span></summary>
+
+From repo root:
 
 ```bash
 rails new rails-todo --api --database=postgresql --skip-kamal
 ```
 
-- `--api`: controllers extend `ActionController::API`. No views, cookies, sessions or asset pipeline. Like `spring-boot-starter-webmvc` without Thymeleaf.
+- `--api`: controllers extend `ActionController::API`. No views, cookies, sessions or asset pipeline. Like a Spring app with `spring-boot-starter-webmvc` and no `spring-boot-starter-thymeleaf`.
 - `--database=postgresql`: adds the `pg` gem and a Postgres `database.yml`. Default is SQLite.
 - `--skip-kamal`: Kamal is the deploy tool. Not needed until the deploy follow-up.
 - Read the output. Every `create` line is a file the generator wrote. At the end, it runs `bundle install`. If `pg` fails to compile, see US-1.3 Step 7.
 
-**Step 2: Remove the nested git repo.** `rails new` runs `git init` even inside an existing repo (checked on Rails 8.1.4).
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 2: Remove the nested git repo.</b></span></summary>
+
+`rails new` runs `git init` even inside an existing repo (checked on Rails 8.1.4).
 
 ```bash
 ls -a rails-todo | grep '^\.git$'
@@ -357,7 +368,12 @@ rm -rf rails-todo/.git
 - Why: a nested `.git` makes the root repo treat `rails-todo/` as an embedded repo. Its files are then not tracked.
 - Delete only `rails-todo/.git`. Keep `.gitignore` and `.gitattributes`.
 
-**Step 3: Check the Ruby pin.**
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 3: Check the Ruby pin.</b></span></summary>
 
 ```bash
 cat rails-todo/.ruby-version
@@ -365,7 +381,14 @@ cat rails-todo/.ruby-version
 
 - Expect: `ruby-4.0.7`, same as `mise.toml`.
 
-**Step 4: Point `config/database.yml` at the shared container.** Edit the `default`, `development` and `test` blocks. Leave `production` alone.
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 4: Point `config/database.yml` at the shared container.</b></span></summary>
+
+Edit the `default`, `development` and `test` blocks. Leave `production` alone.
 
 ```yaml
 default: &default
@@ -390,7 +413,12 @@ test:
 - `&default` / `<<: *default` is a YAML anchor and merge. Same idea as a shared Spring profile.
 - Database names match the init script from US-1.1. Generated names were `rails_todo_development` / `rails_todo_test`.
 
-**Step 5: Prepare the database.**
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 5: Prepare the database.</b></span></summary>
 
 ```bash
 cd rails-todo
@@ -404,7 +432,14 @@ bin/rails runner 'puts ActiveRecord::Base.connection.current_database'
 - `connection refused`: container down. From repo root: `docker compose up -d --wait`.
 - `fe_sendauth: no password supplied`: env not loaded. Redo US-1.3 Steps 1 and 4.
 
-**Step 6: Write a smoke test by hand.** Create `test/integration/health_test.rb`:
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 6: Write a smoke test by hand.</b></span></summary>
+
+Create `test/integration/health_test.rb`:
 
 ```ruby
 require "test_helper"
@@ -426,7 +461,12 @@ bin/rails test
 - `rails_health_check_path` is a route helper. Rails generated it from `as: :rails_health_check` in `config/routes.rb`.
 - Tests run against `todo_rails_test`. Rails loads the schema into it before each run.
 
-**Step 7: Boot the server.**
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 7: Boot the server.</b></span></summary>
 
 ```bash
 bin/rails server
@@ -441,7 +481,13 @@ curl -i localhost:3000/up
 - Expect: `HTTP/1.1 200 OK`. Stop the server with `Ctrl-C`.
 - Watch the server log: one block per request, with controller, action, params and timing.
 
-**Step 8: Run lint and security scans.**
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 8: Run lint and security scans.</b></span></summary>
+
 
 ```bash
 bin/rubocop
@@ -454,7 +500,14 @@ bin/bundler-audit
 - `bin/bundler-audit`: known-CVE check of your gems (OWASP dependency-check).
 - Expect: all clean on a fresh app.
 
-**Step 9: Walk the tree.** Open each path. Write one line per row in `LEARNINGS.md`.
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 9: Walk the tree.</b></span></summary>
+
+Open each path. Write one line per row in `LEARNINGS.md`.
 
 | Rails path | Spring counterpart |
 | --- | --- |
@@ -474,7 +527,14 @@ bin/bundler-audit
 
 - Note: GitHub reads workflows only from the repo-root `.github/`. The generated `rails-todo/.github/` stays inactive until the CI step in the conventions.
 
-**Step 10: Commit.** From repo root:
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 10: Commit.</b></span></summary>
+
+From repo root:
 
 ```bash
 git status
@@ -493,6 +553,10 @@ git commit -m "US-1.4 Rails skeleton"
 - [ ] Folder map written in `LEARNINGS.md`
 
 **What to notice:** Rails generated a health check, lint, security scans and CI config without asking. `Gemfile` vs `build.gradle.kts`: no plugins, no tasks, only dependencies; tasks live in `bin/rails`. Run `bin/rails -T` to list them, like `./gradlew tasks`.
+
+</details>
+
+---
 
 <details>
 <summary><span style="font-weight: bold; color: pink;"><b>Validate</b></span></summary>
