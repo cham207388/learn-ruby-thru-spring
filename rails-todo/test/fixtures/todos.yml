@@ -1,0 +1,8 @@
+buy_milk:
+  title: Buy milk
+
+file_taxes:
+  title: File taxes
+  description: Federal and state returns
+  completed: true
+  due_date: 2026-04-15
