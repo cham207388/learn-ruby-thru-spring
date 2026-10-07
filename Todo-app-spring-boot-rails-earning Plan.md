@@ -54,6 +54,7 @@ Most Spring concepts have a direct Rails counterpart; the big shift is from expl
 | `@ControllerAdvice` / `ProblemDetail` | `rescue_from` in `ApplicationController` | Same idea, declared in a base class |
 | `@Service` + constructor DI | Plain Ruby object or model method | No DI container; keep logic in models until it hurts |
 | `@Transactional` | `ActiveRecord::Base.transaction do ... end` | Block-scoped instead of annotation |
+| `@CreatedDate` / `@LastModifiedDate` + `@EnableJpaAuditing` | `t.timestamps` columns | Active Record fills `created_at` / `updated_at` by column name; no config. No built-in `created_by` |
 | JUnit + MockMvc + Testcontainers | Minitest + `ActionDispatch::IntegrationTest` + fixtures | Test DB is real Postgres; fixtures in YAML |
 | `Optional<T>`, nulls | `nil`, safe navigation `&.` | Everything is an object, including `nil` |
 | Streams (`map`, `filter`) | Enumerable (`map`, `select`) with blocks | Blocks replace lambdas almost everywhere |
@@ -716,7 +717,7 @@ Run from repo root with the container up (`make compose-up`).
 
 *As a developer, I want a Todo domain model with validation so invalid data never reaches the table.*
 
-**Spring track:** `Todo` `@Entity` with `@GeneratedValue(strategy = IDENTITY)`, `@NotBlank @Size(max = 200) title`, audit timestamps via `@CreationTimestamp`/`@UpdateTimestamp`; `TodoRepository extends JpaRepository<Todo, Long>`; no Lombok needed, keep the entity small. Repository test with Testcontainers that saves a valid todo and rejects a blank title.
+**Spring track:** `Todo` `@Entity` with `@GeneratedValue(strategy = IDENTITY)`, `@NotBlank @Size(max = 200) title`, audit timestamps via Spring Data JPA auditing (`@EnableJpaAuditing` on a separate `JpaAuditingConfig` class, `@EntityListeners(AuditingEntityListener.class)` on the entity, `@CreatedDate` / `@LastModifiedDate` on `Instant` fields; `createdBy` / `lastModifiedBy` wait for user accounts); `TodoRepository extends JpaRepository<Todo, Long>`; no Lombok needed, keep the entity small. Repository test with Testcontainers that saves a valid todo and rejects a blank title.
 
 **Rails track**
 
@@ -804,7 +805,7 @@ bin/rails test
 - [ ] Console steps done; `NotNullViolation` vs `RecordInvalid` difference noted in `LEARNINGS.md`
 - [ ] Fixtures and model tests pass; `bin/rubocop` clean
 
-**What to notice:** the Rails model has no fields. Active Record reads columns from Postgres at boot. Validation and persistence live in one class; Spring splits them across entity, repository and DTO. The console against your live model has no real Spring equivalent and will speed up every later story.
+**What to notice:** both stacks fill timestamps for free. Spring needs `@EnableJpaAuditing` plus annotations; Rails fills any column named `created_at` / `updated_at`. Both skip it on bulk writes: JPQL `UPDATE` and Rails `update_all` leave `updated_at` alone. The Rails model has no fields. Active Record reads columns from Postgres at boot. Validation and persistence live in one class; Spring splits them across entity, repository and DTO. The console against your live model has no real Spring equivalent and will speed up every later story.
 
 <details>
 <summary><span style="font-weight: bold; color: pink;"><b>Validate</b></span></summary>

@@ -1,4 +1,28 @@
 {
     "java.compile.nullAnalysis.mode": "disabled",
-    "java.configuration.updateBuildConfiguration": "automatic"
+    "java.configuration.updateBuildConfiguration": "automatic",
+    "sqltools.connections": [
+        {
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5423,
+            "driver": "PostgreSQL",
+            "name": "ruby",
+            "database": "todo_rails_development",
+            "username": "todo",
+            "password": "5b2d00e2b47e74f1febf6868d3cdd39f"
+        },
+        {
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5423,
+            "driver": "PostgreSQL",
+            "name": "spring",
+            "username": "todo",
+            "password": "5b2d00e2b47e74f1febf6868d3cdd39f",
+            "database": "todo_spring"
+        }
+    ]
 }
