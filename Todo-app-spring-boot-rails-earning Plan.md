@@ -1,12 +1,13 @@
 # Todo App: Spring Boot → Rails Learning Plan
 
-Oct 6, 2026 · @Gando
-
-## Overview
+<details>
+<summary><span style="font-weight: bold; color: cyan;">Overview</span></summary>
 
 Build the same Todo REST API twice, Spring Boot first and Rails second, story by story, so every Rails concept lands next to a Java concept you already own. Each story is written once with two implementation tracks and a "What to notice" note that names the parallel or the difference.
 
 **How to work each story:** build the Spring track (fast, familiar), then build the Rails track without looking back, then diff the two in your head using the "What to notice" prompts. Both apps expose identical endpoints and share one Postgres server (separate databases), so the same `curl`/HTTP file tests both.
+
+**Rails track is hand-built:** every Rails step says what to do, why, and how to check it. Type the code yourself; snippets show new syntax, not finished solutions. Run commands from `rails-todo/` unless a step says repo root.
 
 **Scope decision:** both apps are JSON APIs so the comparison stays apples-to-apples. Each CRUD story has an optional Rails stretch (HTML views with Hotwire) because that is where Rails differs most from Spring.
 
@@ -26,7 +27,11 @@ Build the same Todo REST API twice, Spring Boot first and Rails second, story by
 
 Pin exact patch versions on day one from [start.spring.io](https://start.spring.io) and `gem install rails`; minor versions above may have moved since this was written.
 
-## Concept map
+</details>
+
+---
+<details>
+<summary><span style="font-weight: bold; color: cyan;">Concept map</span></summary>
 
 Most Spring concepts have a direct Rails counterpart; the big shift is from explicit configuration and wiring to convention and naming. Keep this table open while you work.
 
@@ -50,19 +55,30 @@ Most Spring concepts have a direct Rails counterpart; the big shift is from expl
 | `Optional<T>`, nulls | `nil`, safe navigation `&.` | Everything is an object, including `nil` |
 | Streams (`map`, `filter`) | Enumerable (`map`, `select`) with blocks | Blocks replace lambdas almost everywhere |
 
-## Phase 1: Setup
+</details>
 
-Phase 1 ends when both apps boot, connect to the same Postgres 18 container, and pass one smoke test each. Repo layout: one monorepo with `spring-todo/`, `rails-todo/`, `compose.yaml`, and `requests.http` at the root.
+---
 
-### US-1.1 Shared database
+<details>
+<summary><span style="font-weight: bold; color: cyan;"><b>Phase 1: Setup</b></span></summary>
+
+Phase 1 ends when both apps boot, connect to the same Postgres 18 container, and pass one smoke test each. Repo layout: one monorepo with `spring-todo/`, `rails-todo/`, `compose.yml`, and `requests.http` at the root.
+
+<details>
+<summary>US-1.1 Shared database</summary>
 
 *As a developer, I want one Postgres 18 instance in Docker so both apps use the same database engine with no local install.*
 
-- [x] `compose.yaml` runs `postgres:18` with a named volume and a healthcheck
+- [x] `compose.yml` runs `postgres:18` with a named volume and a healthcheck
 - [x] Two databases created by an init script: `todo_spring` and `todo_rails_development` (+ `todo_rails_test`)
 - [x] Credentials come from environment variables, never committed
 
-### US-1.2 Spring Boot skeleton
+</details>
+
+---
+
+<details>
+<summary>US-1.2 Spring Boot skeleton</summary>
 
 *As a developer, I want a Spring Boot 4.1 project on Java 25 and Gradle 9.6 so I have a known-good baseline.*
 
@@ -72,53 +88,502 @@ Phase 1 ends when both apps boot, connect to the same Postgres 18 container, and
 - [x] Single feature package: entity, repository, service, controller and DTOs live directly in `com.example.todo`, next to the application class
 - [x] Spotless configured; `./gradlew build` passes; `/actuator/health` returns UP
 
-### US-1.3 Ruby toolchain
+</details>
+
+---
+
+<details>
+<summary>US-1.3 Ruby toolchain (mise)</summary>
 
 *As a Java developer, I want a version-managed Ruby 4.0 install so Ruby works like SDKMAN-managed JDKs.*
 
-- [ ] Ruby 4.0.x installed with mise (or rbenv); `.ruby-version` checked in
-- [ ] `gem install rails` installs Rails 8.1.x; `rails -v` and `bundle -v` (4.x) confirmed
-- [ ] 20 minutes in `irb`: blocks, symbols vs strings, hashes, `nil`, string interpolation
+Ruby and Rails are already on this machine. Verify each tool first; install only when a check fails.
 
-### US-1.4 Rails skeleton
+**Step 1: Check mise.**
+
+```bash
+mise --version
+mise doctor
+```
+
+- Expect: version `2026.x`. In `mise doctor`, look for `activated: yes`.
+- Why: mise is your SDKMAN. It picks tool versions per directory and can load env vars per directory.
+- If `activated: no`: add `eval "$(mise activate zsh)"` to `~/.zshrc`, open a new terminal, run `mise doctor` again. Shims alone run the right Ruby, but they do not export the `[env]` vars from Step 4. Rails needs those vars.
+- If mise missing: `brew install mise`, then do the line above.
+
+**Step 2: Check Ruby.**
+
+```bash
+ruby -v
+which ruby
+```
+
+- Expect: `ruby 4.0.x`, path under `~/.local/share/mise/installs/ruby/`.
+- Path `/usr/bin/ruby` means macOS system Ruby (2.6). Do not use it: too old, and gem installs need `sudo`.
+- If missing: `mise use --global ruby@4.0`. First install compiles Ruby from source and takes several minutes.
+
+**Step 3: Pin Ruby for this repo.** From repo root, use the exact version that `ruby -v` printed:
+
+```bash
+mise use ruby@4.0.7
+cat mise.toml
+```
+
+- Expect: new `mise.toml` with `[tools] ruby = "4.0.7"`.
+- Why: like `.sdkmanrc` or the Gradle toolchain block. Your global config says `4.0` (any patch); the project file wins inside this folder, so everyone gets the same patch.
+- Note: mise ignores `.ruby-version` by default. Rails generates `rails-todo/.ruby-version` in US-1.4 for Docker and CI. Keep both files on the same version.
+
+**Step 4: Load `.env` through mise.** Edit `mise.toml`:
+
+```toml
+[tools]
+ruby = "4.0.7"
+
+[env]
+_.file = ".env"
+```
+
+```bash
+mise trust
+echo $POSTGRES_USER
+```
+
+- Expect: `todo`. mise reloads env at each new prompt; if the line is empty, run `echo` again.
+- Why: Rails does not read `.env` on its own. Spring reads it through `spring.config.import`. mise exports the vars whenever your shell is in this repo, so `config/database.yml` can read `ENV["POSTGRES_USER"]`.
+- `mise trust` is needed once: mise refuses to run env config from an untrusted file.
+
+**Step 5: Check RubyGems and Bundler.**
+
+```bash
+gem -v
+bundle -v
+```
+
+- Expect: both `4.x`. Both ship with Ruby 4.0; no separate install.
+- Why: RubyGems is the package client (Maven Central role). Bundler resolves a project's `Gemfile` and writes `Gemfile.lock` (Gradle dependency resolution plus a lockfile).
+- If `bundle` missing: `gem install bundler`.
+
+**Step 6: Check Rails.**
+
+```bash
+rails -v
+```
+
+- Expect: `Rails 8.1.x`.
+- If missing: `gem install rails -v "~> 8.1"`, then `mise reshim` so the new `rails` command is on PATH.
+- Why: the global `rails` command has one job here: `rails new`. Inside the app, always run `bin/rails`. It uses the Rails version locked in `Gemfile.lock`. Same idea as start.spring.io once, then `./gradlew` forever.
+
+**Step 7: Check the Postgres client library (libpq).**
+
+```bash
+brew list libpq > /dev/null && echo libpq ok
+```
+
+- Why: the `pg` gem is a C extension. `bundle install` compiles it against libpq. The JDBC driver is pure Java, so you never needed this in Spring.
+- If missing: `brew install libpq`.
+- If `bundle install` later fails on `pg`, run this, then `bundle install` again:
+
+```bash
+bundle config build.pg --with-pg-config=$(brew --prefix libpq)/bin/pg_config
+```
+
+**Step 8: irb drill (20 minutes).** Run `irb`. Type each line. Predict the result before you press Enter.
+
+| # | Type this | Expect | Java analogue / lesson |
+| --- | --- | --- | --- |
+| 1 | `5.class`, `nil.class`, `5.even?` | `Integer`, `NilClass`, `true` | Everything is an object. No primitives. |
+| 2 | `name = "todo"` then `"Hi #{name.upcase}"` and `'Hi #{name}'` | `"Hi TODO"`, `"Hi \#{name}"` | Double quotes interpolate; single quotes do not. |
+| 3 | `:title.object_id == :title.object_id` and same with `"title"` | `true`, `false` | A symbol is one interned name. Rails uses symbols for keys, options and method names. |
+| 4 | `todo = { title: "Buy milk", completed: false }` then `todo[:title]`, `todo["title"]` | `"Buy milk"`, `nil` | Symbol key and string key differ. Common bug. Rails `params` accept both. |
+| 5 | `todo.fetch(:due_date)` then `todo.fetch(:due_date, nil)` | `KeyError`, `nil` | `fetch` fails loud, like `Map.get` plus a null check. |
+| 6 | `todo[:due_date]&.year` | `nil` | `&.` is safe navigation: `Optional.map` in one operator. |
+| 7 | `if 0 then "truthy" end` and `if nil then "x" else "falsy" end` | `"truthy"`, `"falsy"` | Only `nil` and `false` are falsy. `0` and `""` are truthy. |
+| 8 | `[1, 2, 3, 4].select { \|n\| n.even? }.map { \|n\| n * 10 }` | `[20, 40]` | Blocks replace lambdas. Same as `stream().filter().map()`. |
+| 9 | `[1, 2, 3, 4].select(&:even?)` | `[2, 4]` | `&:even?` is shorthand for `{ \|n\| n.even? }`, like `Integer::method` refs. |
+| 10 | `todo.each { \|key, value\| puts "#{key}: #{value}" }` | two lines, returns the hash | Hash iteration with two block params. |
+| 11 | `def done?(todo) = todo[:completed]` then `done?(todo)` | `false` | Endless method. Last expression is the return value. `?` names a boolean method; `!` names a raising or dangerous one (`save` vs `save!`). |
+| 12 | `def build(title:, completed: false) = { title:, completed: }` then `build(title: "x")` | `{title: "x", completed: false}` | Keyword arguments with defaults. `{ title: }` is shorthand for `{ title: title }`. |
+
+Done when you can read `validates :title, presence: true, length: { maximum: 200 }` and name every part: a method call (`validates`), a symbol argument (`:title`), keyword arguments (`presence:`, `length:`) and a nested hash. It is a method call that runs when the class loads, not an annotation.
+
+**Checklist**
+
+- [ ] mise activated; `ruby -v` shows 4.0.x from mise
+- [ ] `mise.toml` pins Ruby and loads `.env`; `echo $POSTGRES_USER` works inside the repo; `mise.toml` committed
+- [ ] `gem -v` and `bundle -v` show 4.x; `rails -v` shows 8.1.x
+- [ ] libpq present
+- [ ] irb drill done; one note in `LEARNINGS.md`
+
+</details>
+
+---
+
+<details>
+<summary>US-1.4 Rails skeleton</summary>
 
 *As a developer, I want a Rails 8.1 API app on Postgres so I can compare it file by file with the Spring project.*
 
-- [ ] `rails new rails-todo --api --database=postgresql --skip-kamal` (keep RuboCop, Brakeman, Solid gems defaults)
-- [ ] `config/database.yml` reads host, user and password from `ENV`; `bin/rails db:prepare` succeeds
-- [ ] `bin/rubocop` and `bin/rails test` pass; `GET /up` returns 200
-- [ ] Walk the generated tree and map each folder to its Spring counterpart (`app/models` vs entity package, `config/routes.rb` vs mappings)
+**Step 1: Generate the app.** From repo root:
 
-**What to notice:** Rails generated health check, linting, security scanning and CI config without asking. `Gemfile` vs `build.gradle.kts`: no plugins, no tasks, just dependencies; tasks live in `bin/rails`.
+```bash
+rails new rails-todo --api --database=postgresql --skip-kamal
+```
 
-## Phase 2: Todo model and migration
+- `--api`: controllers extend `ActionController::API`. No views, cookies, sessions or asset pipeline. Like `spring-boot-starter-webmvc` without Thymeleaf.
+- `--database=postgresql`: adds the `pg` gem and a Postgres `database.yml`. Default is SQLite.
+- `--skip-kamal`: Kamal is the deploy tool. Not needed until the deploy follow-up.
+- Read the output. Every `create` line is a file the generator wrote. At the end, it runs `bundle install`. If `pg` fails to compile, see US-1.3 Step 7.
+
+**Step 2: Remove the nested git repo.** `rails new` runs `git init` even inside an existing repo (checked on Rails 8.1.4).
+
+```bash
+ls -a rails-todo | grep '^\.git$'
+rm -rf rails-todo/.git
+```
+
+- Why: a nested `.git` makes the root repo treat `rails-todo/` as an embedded repo. Its files are then not tracked.
+- Delete only `rails-todo/.git`. Keep `.gitignore` and `.gitattributes`.
+
+**Step 3: Check the Ruby pin.**
+
+```bash
+cat rails-todo/.ruby-version
+```
+
+- Expect: `ruby-4.0.7`, same as `mise.toml`.
+
+**Step 4: Point `config/database.yml` at the shared container.** Edit the `default`, `development` and `test` blocks. Leave `production` alone.
+
+```yaml
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  max_connections: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+  host: <%= ENV.fetch("POSTGRES_HOST", "localhost") %>
+  port: <%= ENV.fetch("POSTGRES_PORT", 5423) %>
+  username: <%= ENV["POSTGRES_USER"] %>
+  password: <%= ENV["POSTGRES_PASSWORD"] %>
+
+development:
+  <<: *default
+  database: todo_rails_development
+
+test:
+  <<: *default
+  database: todo_rails_test
+```
+
+- `<%= %>` is ERB. Rails runs it before parsing the YAML. `ENV.fetch("X", default)` is `System.getenv` with a fallback.
+- `&default` / `<<: *default` is a YAML anchor and merge. Same idea as a shared Spring profile.
+- Database names match the init script from US-1.1. Generated names were `rails_todo_development` / `rails_todo_test`.
+
+**Step 5: Prepare the database.**
+
+```bash
+cd rails-todo
+bin/rails db:prepare
+bin/rails runner 'puts ActiveRecord::Base.connection.current_database'
+```
+
+- Expect: no error, then `todo_rails_development`.
+- Why: `db:prepare` creates the DB if missing, runs pending migrations and seeds. Safe to run again. Like Flyway on startup, but you run it.
+- `bin/rails runner` runs one line of Ruby inside the booted app.
+- `connection refused`: container down. From repo root: `docker compose up -d --wait`.
+- `fe_sendauth: no password supplied`: env not loaded. Redo US-1.3 Steps 1 and 4.
+
+**Step 6: Write a smoke test by hand.** Create `test/integration/health_test.rb`:
+
+```ruby
+require "test_helper"
+
+class HealthTest < ActionDispatch::IntegrationTest
+  test "health check returns 200" do
+    get rails_health_check_path
+    assert_response :success
+  end
+end
+```
+
+```bash
+bin/rails test
+```
+
+- Expect: `1 runs, 1 assertions, 0 failures`.
+- Why: `ActionDispatch::IntegrationTest` sends a real request through the full Rails stack. It is MockMvc plus `@SpringBootTest` in one.
+- `rails_health_check_path` is a route helper. Rails generated it from `as: :rails_health_check` in `config/routes.rb`.
+- Tests run against `todo_rails_test`. Rails loads the schema into it before each run.
+
+**Step 7: Boot the server.**
+
+```bash
+bin/rails server
+```
+
+In a second terminal:
+
+```bash
+curl -i localhost:3000/up
+```
+
+- Expect: `HTTP/1.1 200 OK`. Stop the server with `Ctrl-C`.
+- Watch the server log: one block per request, with controller, action, params and timing.
+
+**Step 8: Run lint and security scans.**
+
+```bash
+bin/rubocop
+bin/brakeman
+bin/bundler-audit
+```
+
+- `bin/rubocop`: style lint (Spotless plus Checkstyle). Fix with `bin/rubocop -a`.
+- `bin/brakeman`: static security scan of your code.
+- `bin/bundler-audit`: known-CVE check of your gems (OWASP dependency-check).
+- Expect: all clean on a fresh app.
+
+**Step 9: Walk the tree.** Open each path. Write one line per row in `LEARNINGS.md`.
+
+| Rails path | Spring counterpart |
+| --- | --- |
+| `Gemfile`, `Gemfile.lock` | `build.gradle.kts`, `gradle/libs.versions.toml` (plus a lockfile) |
+| `bin/` | `gradlew` plus Gradle tasks |
+| `config/application.rb` | `@SpringBootApplication` class plus `application.yaml` |
+| `config/environments/*.rb` | profile files `application-{profile}.yaml` |
+| `config/initializers/` | `@Configuration` classes |
+| `config/routes.rb` | every `@RequestMapping` in one file |
+| `config/database.yml` | `spring.datasource.*` |
+| `app/controllers/` | `@RestController` classes |
+| `app/models/` | `@Entity` plus repository |
+| `app/jobs/`, `app/mailers/` | `@Async` / Spring Batch, `JavaMailSender` |
+| `db/migrate/`, `db/schema.rb` | `db/migration/` (Flyway) |
+| `test/` | `src/test/java/` |
+| `.github/workflows/ci.yml` | CI workflow you would write yourself |
+
+- Note: GitHub reads workflows only from the repo-root `.github/`. The generated `rails-todo/.github/` stays inactive until the CI step in the conventions.
+
+**Step 10: Commit.** From repo root:
+
+```bash
+git status
+git add mise.toml rails-todo
+git commit -m "US-1.4 Rails skeleton"
+```
+
+- Check: `git status` lists files inside `rails-todo/`, not one `rails-todo` entry. One entry means Step 2 was missed.
+
+**Checklist**
+
+- [ ] `rails new` with `--api --database=postgresql --skip-kamal`; nested `.git` removed
+- [ ] `database.yml` reads host, port, user and password from `ENV`; `bin/rails db:prepare` succeeds
+- [ ] Smoke test passes; `GET /up` returns 200
+- [ ] `bin/rubocop`, `bin/brakeman`, `bin/bundler-audit` clean
+- [ ] Folder map written in `LEARNINGS.md`
+
+**What to notice:** Rails generated a health check, lint, security scans and CI config without asking. `Gemfile` vs `build.gradle.kts`: no plugins, no tasks, only dependencies; tasks live in `bin/rails`. Run `bin/rails -T` to list them, like `./gradlew tasks`.
+
+</details>
+
+---
+
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: cyan;"><b>Phase 2: Todo model and migration</b></span></summary>
 
 Phase 2 creates the `todos` table through a migration in each stack and maps it to a domain model, before any endpoint exists.
 
 **Table `todos`:** `id` bigint identity PK · `title` varchar(200) not null · `description` text null · `completed` boolean not null default false · `due_date` date null · `created_at` / `updated_at` timestamptz not null.
 
-### US-2.1 Create the todos table
+<details>
+<summary>US-2.1 Create the todos table</summary>
 
 *As a developer, I want the schema defined in versioned migrations so every environment builds the same database.*
 
-|  | Spring track | Rails track |
-| --- | --- | --- |
-| Migration | `src/main/resources/db/migration/V1__create_todos.sql`, hand-written SQL | `bin/rails g migration CreateTodos title:string description:text completed:boolean due_date:date`, then edit for `null: false`, `default: false`, `limit: 200`, `t.timestamps` |
-| Apply | Runs on app start; `./gradlew flywayInfo` optional | `bin/rails db:migrate`; inspect `db/schema.rb` |
-| Rollback | New forward migration (Flyway Community has no undo) | `bin/rails db:rollback` (change method is reversible) |
-| Done when | `\d todos` in psql matches the spec | Same, and `schema.rb` is committed |
+**Spring track:** `src/main/resources/db/migration/V1__create_todos.sql`, hand-written SQL. Flyway runs it on app start; `./gradlew flywayInfo` is optional. Rollback is a new forward migration (Flyway Community has no undo). Done when `\d todos` in psql matches the spec.
 
-### US-2.2 Map the Todo model
+**Rails track**
+
+**Step 1: Make Rails use `timestamptz`.** Create `config/initializers/postgres_timestamptz.rb`:
+
+```ruby
+ActiveSupport.on_load(:active_record_postgresqladapter) do
+  self.datetime_type = :timestamptz
+end
+```
+
+- Why: by default, Rails maps `datetime` to `timestamp(6)` without time zone. The spec says `timestamptz`, same as Spring.
+- `on_load` runs the block when the Postgres adapter class loads. Rails loads its pieces lazily, so you hook in instead of configuring up front.
+- Do this before the first migration. Changing it later means a new migration to convert columns.
+
+**Step 2: Generate the migration.**
+
+```bash
+bin/rails generate migration CreateTodos title:string description:text completed:boolean due_date:date
+```
+
+- Expect: `db/migrate/<timestamp>_create_todos.rb`.
+- Open it. Find the class name, `ActiveRecord::Migration[8.1]`, the `change` method and the `create_table ... do |t|` block.
+- `[8.1]` pins migration behavior to Rails 8.1. Old migrations keep old behavior after upgrades.
+- The timestamp prefix orders migrations, like Flyway's `V1__`.
+- Name `CreateTodos` plus `field:type` pairs tells the generator to write a `create_table`. A name like `AddDueDateToTodos` writes `add_column` instead.
+
+**Step 3: Add the constraints by hand.** The generator only wrote names and types. Edit to match the spec:
+
+- `title`: `null: false, limit: 200`
+- `completed`: `null: false, default: false`
+- Keep `t.timestamps`. It adds `created_at` and `updated_at`, both `null: false`.
+- Why: Active Record validations come in US-2.2. The DB constraint is the last line of defense, same as `NOT NULL` in your Flyway SQL.
+
+**Step 4: Run the migration.**
+
+```bash
+bin/rails db:migrate
+cat db/schema.rb
+```
+
+- Expect: `create_table(:todos)` in the output, then a `schema.rb` with your table.
+- Why: Rails dumps `db/schema.rb` from the live DB after every migration. Tests load the schema from this file. Commit it and never edit it by hand.
+
+**Step 5: Check the table in psql.** From repo root:
+
+```bash
+docker exec -it todo-db sh -c 'psql -U "$POSTGRES_USER" -d todo_rails_development -c "\d todos"'
+```
+
+- Compare each column with the spec.
+- One difference: Rails creates `id` as `bigserial` (bigint plus a sequence), not `GENERATED ... AS IDENTITY`. Both are auto-increment bigint. Accept it and note it in `LEARNINGS.md`.
+
+**Step 6: Practice rollback.**
+
+```bash
+bin/rails db:migrate:status
+bin/rails db:rollback
+bin/rails db:migrate:status
+bin/rails db:migrate
+```
+
+- Expect: status `up`, then `down`, then `up` again. Run Step 5's `\d todos` while it is down: the table is gone.
+- Why: `change` is reversible. Rails knows the inverse of `create_table` is `drop_table`. Flyway Community needs a new forward migration for this.
+- Rule: roll back only migrations that were never shared. After a commit is pushed, write a new migration.
+
+**Step 7: Commit** the initializer, the migration and `db/schema.rb`.
+
+**Checklist**
+
+- [ ] `datetime_type = :timestamptz` set before the first migration
+- [ ] Migration has `null: false`, `limit: 200`, `default: false`, `t.timestamps`
+- [ ] `\d todos` matches the spec (except `bigserial`)
+- [ ] Rollback and re-migrate practiced; `db/schema.rb` committed
+
+</details>
+
+---
+
+<details>
+<summary>US-2.2 Map the Todo model</summary>
 
 *As a developer, I want a Todo domain model with validation so invalid data never reaches the table.*
 
-- [ ] **Spring:** `Todo` `@Entity` with `@GeneratedValue(strategy = IDENTITY)`, `@NotBlank @Size(max = 200) title`, audit timestamps via `@CreationTimestamp`/`@UpdateTimestamp`; `TodoRepository extends JpaRepository<Todo, Long>`; no Lombok needed, keep the entity small
-- [ ] **Rails:** `class Todo < ApplicationRecord` with `validates :title, presence: true, length: { maximum: 200 }`; columns and timestamps come free from the schema
-- [ ] **Both:** a repository/model test that saves a valid todo and rejects a blank title (Spring with Testcontainers, Rails with Minitest + `test/fixtures/todos.yml`)
+**Spring track:** `Todo` `@Entity` with `@GeneratedValue(strategy = IDENTITY)`, `@NotBlank @Size(max = 200) title`, audit timestamps via `@CreationTimestamp`/`@UpdateTimestamp`; `TodoRepository extends JpaRepository<Todo, Long>`; no Lombok needed, keep the entity small. Repository test with Testcontainers that saves a valid todo and rejects a blank title.
 
-**What to notice:** the Rails model has no fields; Active Record reads columns from Postgres at boot. Validation and persistence live in one class, where Spring splits them across entity, repository and DTO. Open `bin/rails console` and try `Todo.create!(title: "x")`; this REPL against your live model has no real Spring equivalent and will speed up every later story.
+**Rails track**
 
-## Phase 3: CRUD user stories
+**Step 1: Create the model file by hand.** Create `app/models/todo.rb`:
+
+```ruby
+class Todo < ApplicationRecord
+end
+```
+
+- Why: no generator, so you see how little is needed. `bin/rails g model` would write the model, migration, test and fixture in one go.
+- File name is the snake_case class name. The Zeitwerk autoloader requires it, like Java's one-public-class-per-file rule.
+- Class `Todo` maps to table `todos` by naming convention. No `@Table`.
+
+**Step 2: Explore in the console.**
+
+```bash
+bin/rails console
+```
+
+Try each line and read the SQL in the output:
+
+```ruby
+Todo.column_names
+todo = Todo.new(title: "Buy milk")
+todo.completed
+todo.save
+Todo.count
+Todo.last
+Todo.create!(title: "")
+Todo.create!(title: nil)
+```
+
+- `todo.completed` is `false` before save. Rails read the default from the schema.
+- `title: ""` succeeds: the DB only rejects `NULL`.
+- `title: nil` raises `ActiveRecord::NotNullViolation`. That error comes from Postgres, not Rails.
+
+**Step 3: Add validation.** In `Todo`, add:
+
+```ruby
+validates :title, presence: true, length: { maximum: 200 }
+```
+
+In the console, run `reload!`, then:
+
+```ruby
+todo = Todo.new(title: " ")
+todo.valid?
+todo.errors.to_hash
+todo.save
+todo.save!
+Todo.new(title: "a" * 201).valid?
+```
+
+- Expect: `false`, `{title: ["can't be blank"]}`, `false`, then `ActiveRecord::RecordInvalid`, then `false`.
+- `presence` treats whitespace-only as blank, same as `@NotBlank`.
+- `save` returns true or false. `save!` raises. You will use both in Phase 3.
+- Why: validation lives on the model and runs on every save. Spring validates at the controller boundary with `@Valid`.
+
+**Step 4: Write fixtures.** Create `test/fixtures/todos.yml` with two records:
+
+- `buy_milk`: title only.
+- `file_taxes`: title, description, `completed: true` and a `due_date`.
+- Format: top-level key is the fixture name; nested keys are column values.
+- Why: Rails loads every fixture into the test DB before each test and rolls back after it. Like `@Sql` scripts plus a `@Transactional` test. `id`, `created_at` and `updated_at` fill in automatically.
+- Access a fixture in a test with `todos(:buy_milk)`.
+
+**Step 5: Write the model test.** Create `test/models/todo_test.rb`, class `TodoTest < ActiveSupport::TestCase`. Write these tests:
+
+- Saves with a valid title, and `completed` defaults to `false`.
+- Invalid with a blank title; `errors[:title]` includes `"can't be blank"`.
+- Invalid with a 201-character title.
+- Fixture `buy_milk` loads with its title.
+- Assertion methods: `assert`, `assert_not`, `assert_equal expected, actual`, `assert_includes collection, item`.
+- Test syntax: `test "description" do ... end`.
+
+```bash
+bin/rails test test/models/todo_test.rb
+bin/rails test
+```
+
+**Checklist**
+
+- [ ] `app/models/todo.rb` written by hand, with presence and length validation
+- [ ] Console steps done; `NotNullViolation` vs `RecordInvalid` difference noted in `LEARNINGS.md`
+- [ ] Fixtures and model tests pass; `bin/rubocop` clean
+
+**What to notice:** the Rails model has no fields. Active Record reads columns from Postgres at boot. Validation and persistence live in one class; Spring splits them across entity, repository and DTO. The console against your live model has no real Spring equivalent and will speed up every later story.
+
+</details>
+
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: cyan;"><b>Phase 3: CRUD user stories</b></span></summary>
 
 Build these four in order; each adds one new Rails idea on top of the last. Both apps expose the same contract under `/api/todos`, so `requests.http` tests either one by switching the port (Spring 8081, Rails 3000).
 
@@ -126,32 +591,141 @@ Build these four in order; each adds one new Rails idea on top of the last. Both
 | --- | --- | --- | --- |
 | US-3.1 Create | `POST /api/todos` | 201 + body + `Location` header | 422 validation |
 | US-3.2 View one | `GET /api/todos/{id}` | 200 | 404 |
-| US-3.2 View list | `GET /api/todos?completed=` | 200, newest first | none |
+| US-3.2 View list | `GET /api/todos?completed=&page=&size=` | 200, newest first | none |
 | US-3.3 Update | `PATCH /api/todos/{id}` | 200 + body | 404, 422 |
 | US-3.4 Delete | `DELETE /api/todos/{id}` | 204 | 404 |
 
-Error bodies use RFC 9457 Problem Details (`application/problem+json`) in both apps, so clients cannot tell which stack answered.
+### Shared JSON contract
 
-### US-3.1 Create a todo
+Both apps must return the same JSON shape. Decide it once here:
+
+- **Keys are snake_case:** `id`, `title`, `description`, `completed`, `due_date`, `created_at`, `updated_at`. Rails does this by default. Spring: set Jackson's property naming strategy to `SNAKE_CASE`.
+- **Request bodies are flat:** `{"title": "Buy milk"}`, not wrapped in `{"todo": {...}}`.
+- **List body:** `{"items": [...], "page": 1, "size": 20, "total": 42}`. `page` starts at 1. Spring: map `Page` to your own `PageResponse` record, because Spring's `Page` JSON is shaped differently and 0-based.
+- **Errors:** RFC 9457 Problem Details with `Content-Type: application/problem+json`:
+
+```json
+{
+  "type": "about:blank",
+  "title": "Unprocessable Content",
+  "status": 422,
+  "detail": "Validation failed",
+  "errors": { "title": ["can't be blank"] }
+}
+```
+
+- `errors` maps field names to message lists. Message text may differ between stacks; keys and shape must not. Spring: `problemDetail.setProperty("errors", map)`.
+
+<details>
+<summary>US-3.1 Create a todo</summary>
 
 *As a user, I want to create a todo with a title and optional description and due date so I can track what I need to do.*
 
 **Acceptance criteria**
 
-- [ ] Valid request returns 201, the saved todo (with `id`, `completed: false`, timestamps) and `Location: /api/todos/{id}`
-- [ ] Blank or 200+ character title returns 422 with field-level errors
+- [ ] Valid request returns 201, the saved todo (with `id`, `completed: false`, timestamps) and a `Location` header ending in `/api/todos/{id}`
+- [ ] Blank title or title over 200 characters returns 422 with field-level errors
 - [ ] Unknown fields (e.g. `id`, `completed`) in the request are ignored, not saved
 - [ ] Request test covers success and both validation failures
 
 **Spring track:** `CreateTodoRequest` record with Bean Validation, `@Valid @RequestBody`, `TodoService.create` (`@Transactional`), `TodoResponse` record, `ResponseEntity.created(uri)`; `@RestControllerAdvice` maps `MethodArgumentNotValidException` to `ProblemDetail` with status 422.
 
-**Rails track:** `bin/rails g controller Api::Todos` (not scaffold, so you write each line); `namespace :api { resources :todos, only: :create }`; `params.expect(todo: [:title, :description, :due_date])` for strong parameters (the Rails 8 style); `render json: todo, status: :created, location: api_todo_url(todo)`; on failure render errors with `:unprocessable_content`.
+**Rails track**
 
-**What to notice:** strong parameters replace the request DTO and do the mass-assignment protection that a record gives you for free in Java. `todo.save` returns true/false instead of throwing; `save!` throws. Compare where validation runs: controller boundary in Spring, model in Rails.
+**Step 1: Add routes.** In `config/routes.rb`, inside the `draw` block:
+
+```ruby
+namespace :api do
+  resources :todos, only: %i[create show]
+end
+```
+
+```bash
+bin/rails routes -g todos
+```
+
+- Expect: `POST /api/todos` to `api/todos#create`, and `GET /api/todos/:id` to `api/todos#show`, with helper names `api_todos` and `api_todo`.
+- `namespace :api` adds the `/api` URL prefix and the `Api::` module. Like a class-level `@RequestMapping("/api")`.
+- `resources` writes REST routes from conventions. `only:` limits them.
+- Why `show` now: the `Location` header uses the `api_todo_url` helper, and that helper exists only when the `show` route exists. The `show` action comes in US-3.2.
+- `%i[create show]` is shorthand for `[:create, :show]`.
+
+**Step 2: Generate the controller.**
+
+```bash
+bin/rails generate controller Api::Todos
+```
+
+- Expect: `app/controllers/api/todos_controller.rb` (empty class) and `test/controllers/api/todos_controller_test.rb`.
+- Why not `scaffold`: scaffold writes every line for you. Here you write each line.
+
+**Step 3: Add a Problem Details helper.** In `app/controllers/application_controller.rb`, add a private method:
+
+```ruby
+private
+
+def render_problem(status:, detail:, errors: nil)
+  code = Rack::Utils.status_code(status)
+  body = { type: "about:blank", title: Rack::Utils::HTTP_STATUS_CODES[code], status: code, detail: detail }
+  body[:errors] = errors if errors
+  render json: body, status: code, content_type: "application/problem+json"
+end
+```
+
+- Why here: every controller extends `ApplicationController`, so every controller can call it. Spring puts this in a separate `@RestControllerAdvice` class.
+- `Rack::Utils.status_code(:unprocessable_content)` turns a status symbol into `422`.
+- `body[:errors] = errors if errors` is a trailing `if`: Ruby's one-line conditional.
+
+**Step 4: Write strong parameters.** In `Api::TodosController`, add a private method `create_params`:
+
+```ruby
+params.expect(todo: [:title, :description, :due_date])
+```
+
+- Why: this is the allow-list of fields a client may set. Every other key is dropped. A Java request record gives you this for free, because it only has the fields you declare.
+- `params.expect` is the Rails 8 style. When `todo` is missing or the wrong shape, it returns 400 instead of raising a 500.
+- The body is flat (`{"title": "x"}`), but `expect` looks under `todo`. Rails `wrap_parameters` copies JSON keys that match `Todo` columns under a `todo` key for you. Check the server log: `Parameters: {"title" => "x", "todo" => {"title" => "x"}}`.
+
+**Step 5: Write the `create` action.**
+
+- Build: `todo = Todo.new(create_params)`.
+- Branch on `todo.save` (true or false).
+- Success: `render json: todo, status: :created, location: api_todo_url(todo)`.
+- Failure: call `render_problem` with `:unprocessable_content`, a `detail`, and `errors: todo.errors.to_hash`.
+- Why `save`, not `save!`: invalid input is an expected path. Do not use exceptions for normal control flow.
+
+**Step 6: Try it by hand.** Start `bin/rails server`. In `requests.http` at repo root (or with `curl -i`), send:
+
+1. `{"title": "Buy milk", "due_date": "2026-12-01"}` → 201. Check the `Location` header.
+2. `{"title": ""}` → 422 Problem Details.
+3. A 201-character title → 422.
+4. `{"title": "x", "id": 999, "completed": true}` → 201 with a new id and `completed: false`. The log shows `Unpermitted parameters: :id, :completed`.
+
+**Step 7: Write request tests.** In `test/controllers/api/todos_controller_test.rb`:
+
+```ruby
+post api_todos_url, params: { title: "Buy milk" }, as: :json
+assert_response :created
+body = response.parsed_body
+```
+
+- `as: :json` sends a JSON body, like `contentType(APPLICATION_JSON)` in MockMvc.
+- `response.parsed_body` returns the JSON as a hash with string keys: `body["id"]`.
+- Tests to write: success (status, body, `response.location`), blank title, long title, ignored `id`/`completed`.
+- Useful assertions: `assert_difference("Todo.count", 1) { ... }`, `assert_no_difference("Todo.count") { ... }`, `assert_equal "application/problem+json", response.media_type`.
+
+**Step 8: Finish.** `bin/rails test` and `bin/rubocop` green. Commit.
+
+**What to notice:** strong parameters replace the request DTO. `todo.save` returns true or false; `save!` raises. Validation runs at the controller boundary in Spring and in the model in Rails.
 
 *Rails stretch:* add an HTML `new`/`create` with a form helper and Turbo, to see full-stack Rails.
 
-### US-3.2 View todos
+</details>
+
+---
+
+<details>
+<summary>US-3.2 View todos</summary>
 
 *As a user, I want to see all my todos and a single todo so I know what is outstanding.*
 
@@ -162,13 +736,72 @@ Error bodies use RFC 9457 Problem Details (`application/problem+json`) in both a
 - [ ] Unknown id returns 404 Problem Details
 - [ ] Tests cover list, filter, show and 404
 
-**Spring track:** `TodoRepository.findByCompleted(boolean, Pageable)` derived query; `Page<TodoResponse>` mapped from entities; throw a `TodoNotFoundException` handled in the advice; `@Transactional(readOnly = true)` on reads.
+**Spring track:** `TodoRepository.findByCompleted(boolean, Pageable)` derived query; `Page<TodoResponse>` mapped to the shared `PageResponse` shape; throw a `TodoNotFoundException` handled in the advice; `@Transactional(readOnly = true)` on reads.
 
-**Rails track:** `Todo.order(created_at: :desc)` plus a `scope :completed, ->(value) { where(completed: value) }`; pagination with `limit`/`offset` by hand first (then try the `pagy` gem); `Todo.find(params[:id])` raises `ActiveRecord::RecordNotFound`, handled once with `rescue_from` in `ApplicationController`.
+**Rails track**
 
-**What to notice:** scopes are chainable and lazy, like a JPA `Specification` without the boilerplate. Watch the SQL in the Rails log, and use `.to_sql` in the console, the way you would turn on `show-sql` in Hibernate.
+**Step 1: Add the `index` route.** Change `only:` to `%i[index show create]`. Run `bin/rails routes -g todos` to check.
 
-### US-3.3 Update a todo
+**Step 2: Handle not-found once.** In `ApplicationController`, add:
+
+```ruby
+rescue_from ActiveRecord::RecordNotFound, with: :not_found
+```
+
+Then write a private `not_found(error)` method that calls `render_problem` with `:not_found` and `error.message`.
+
+- Why: `Todo.find` raises `RecordNotFound` for an unknown id. `rescue_from` catches it for every controller. Like `@ExceptionHandler` in `@RestControllerAdvice`.
+
+**Step 3: Write `show`.** One line: render `Todo.find(params[:id])` as JSON.
+
+- Try `/api/todos/999`: expect 404 Problem Details.
+- In the console, compare `Todo.find(999)` (raises) with `Todo.find_by(id: 999)` (returns `nil`). Pick by intent: `find` when absence is an error.
+
+**Step 4: Add a scope.** In `Todo`:
+
+```ruby
+scope :by_completed, ->(value) { where(completed: value) }
+```
+
+In the console:
+
+```ruby
+Todo.by_completed(true).to_sql
+Todo.order(created_at: :desc).by_completed(false).limit(2).to_sql
+Todo.by_completed(true).to_a
+```
+
+- `->(value) { ... }` is a lambda.
+- `to_sql` shows the SQL without running it. Scopes are lazy: SQL runs only on `to_a`, `each` or `render`. Like a JPA `Specification`, without the boilerplate.
+- Why `by_completed`, not `completed`: `todo.completed` is already the column reader. Same name on the class reads as the same thing.
+
+**Step 5: Write `index`.** Build it in four parts:
+
+1. **Parse the filter.** Query params are always strings. Convert with `ActiveModel::Type::Boolean.new.cast(params[:completed])`: `"true"` gives `true`, `"false"` gives `false`, missing gives `nil`. Spring's `@RequestParam Boolean` did this for you.
+2. **Build the query.** Start with `Todo.order(created_at: :desc, id: :desc)`. Apply `by_completed` only when the filter is not `nil`. `id: :desc` breaks ties when two rows share `created_at`, and fixtures often do.
+3. **Paginate by hand.** `page` = `params[:page]` as integer, at least 1. `size` = `params[:size]` as integer, default 20, clamped to 1..100. Hints: `params.fetch(:size, 20).to_i.clamp(1, 100)`, `limit(size)`, `offset((page - 1) * size)`. Take `total` with `.count` before `limit` and `offset`.
+4. **Render** `{ items:, page:, size:, total: }`. That is the hash shorthand from the irb drill.
+
+- Check the server log: two queries, `SELECT COUNT(*)` then `SELECT ... LIMIT ... OFFSET`. Spring Data's `Page` runs the same two queries.
+
+**Step 6: Write request tests.**
+
+- List is newest first. Set fixture times with ERB, e.g. `created_at: <%= 2.days.ago %>`.
+- `?completed=true` and `?completed=false` filter.
+- `?page=2&size=1` returns the second item; `total` is correct.
+- `?size=500` returns `size: 100`.
+- `show` returns 200 with the right title; unknown id returns 404 with media type `application/problem+json`.
+
+**Step 7: Optional: try a gem.** `bundle add pagy`, replace your hand pagination, and compare. `bundle add` edits `Gemfile` and runs `bundle install`, like adding a line to `build.gradle.kts` and syncing. Revert if you prefer your version.
+
+**What to notice:** scopes are chainable and lazy. Watch the SQL in the Rails log and use `.to_sql` in the console, the way you would turn on `show-sql` in Hibernate.
+
+</details>
+
+---
+
+<details>
+<summary>US-3.3 Update a todo</summary>
 
 *As a user, I want to edit a todo and mark it complete so my list stays accurate.*
 
@@ -181,11 +814,60 @@ Error bodies use RFC 9457 Problem Details (`application/problem+json`) in both a
 
 **Spring track:** `UpdateTodoRequest` record with nullable fields; service loads the entity and applies non-null fields inside `@Transactional` (dirty checking does the update, no explicit `save`).
 
-**Rails track:** `todo.update(todo_params)` with `completed` added to permitted params; a `before_action :set_todo, only: %i[show update destroy]` removes duplicate lookups.
+**Rails track**
 
-**What to notice:** `before_action` is Rails' answer to cross-cutting code you would put in an interceptor or aspect. Both stacks rely on change tracking: Hibernate dirty checking vs Active Record `changed?` / `saved_changes`. Try `todo.changes` in the console.
+**Step 1: Add the `update` route.** Add `update` to `only:`. `bin/rails routes -g todos` now shows both `PATCH` and `PUT` for `update`. Rails maps both to one action.
 
-### US-3.4 Delete a todo
+**Step 2: Extract a shared lookup.** Add to the top of `Api::TodosController`:
+
+```ruby
+before_action :set_todo, only: %i[show update]
+```
+
+Write private `set_todo`: `@todo = Todo.find(params[:id])`. Change `show` to render `@todo`.
+
+- Why: `before_action` runs before the listed actions. Rails' answer to an interceptor or aspect.
+- `@todo` is an instance variable. Rails creates a new controller object per request, so `@todo` is safe to share between the filter and the action. Spring controllers are singletons; a field there would be shared across requests.
+
+**Step 3: Add update parameters.** Write a second private method `update_params` that also permits `:completed`.
+
+- Why a second method: create must ignore `completed` (US-3.1 criteria). Update must accept it. One shared method cannot do both.
+
+**Step 4: Write `update`.** Same shape as `create`: branch on `@todo.update(update_params)`. Render `@todo` with 200, or Problem Details with 422.
+
+- Partial update is automatic: `update` assigns only the keys present.
+- Sending `"description": null` clears the field. Omitting `description` leaves it. Spring's nullable-field record cannot tell these two apart. Note it in `LEARNINGS.md`.
+
+**Step 5: See change tracking in the console.**
+
+```ruby
+todo = Todo.first
+todo.title = "New title"
+todo.changed?
+todo.changes
+todo.save
+todo.saved_changes
+todo.save
+```
+
+- The second `save` runs no SQL: nothing changed. Active Record dirty tracking works like Hibernate dirty checking.
+
+**Step 6: Write request tests.**
+
+- Partial update: send only `title`; `description` stays.
+- Mark complete: send `completed: true`.
+- Timestamps: wrap the request in `travel 1.minute do ... end`. Then `updated_at` changes and `created_at` stays. `travel` moves the test clock, like a fixed `Clock` bean.
+- 404 for unknown id; 422 for blank title.
+- Use `patch api_todo_url(todos(:buy_milk)), params: { ... }, as: :json`. Reload the record with `todo.reload` before asserting.
+
+**What to notice:** `before_action` handles cross-cutting code. Both stacks track changes: Hibernate dirty checking vs Active Record `changed?` / `saved_changes`.
+
+</details>
+
+---
+
+<details>
+<summary>US-3.4 Delete a todo</summary>
 
 *As a user, I want to delete a todo I no longer need so my list stays clean.*
 
@@ -197,18 +879,50 @@ Error bodies use RFC 9457 Problem Details (`application/problem+json`) in both a
 
 **Spring track:** `TodoService.delete` checks existence (`existsById` or find-then-delete) and throws not-found; controller returns `ResponseEntity.noContent()`.
 
-**Rails track:** `@todo.destroy!` then `head :no_content`; 404 already handled by `set_todo` + `rescue_from`.
+**Rails track**
 
-**What to notice:** `destroy` runs callbacks, `delete` skips them, much like JPA `remove` vs a bulk JPQL delete. With the routes complete, `resources :todos` now replaces five mapping annotations; run `bin/rails routes` to see the table it generated.
+**Step 1: Open all routes.** Replace the `only:` list with plain `resources :todos`. Run `bin/rails routes -g todos`. API mode skips the HTML-only `new` and `edit` routes, so you get exactly five actions.
 
-## Definition of done and conventions
+**Step 2: Add `destroy` to `before_action`.** The `only:` list becomes `%i[show update destroy]`. The 404 case is now handled for free.
+
+**Step 3: Write `destroy`.** Two lines: `@todo.destroy!`, then `head :no_content`.
+
+- `head` sends a status with no body.
+- `destroy!` raises if a callback stops the delete. With no callbacks it acts like `destroy`, but failure is loud.
+
+**Step 4: Compare `destroy` and `delete` in the console.** Watch the SQL:
+
+```ruby
+Todo.create!(title: "a").destroy
+Todo.create!(title: "b")
+Todo.where(title: "b").delete_all
+```
+
+- `destroy` loads the record and runs callbacks, then deletes. `delete_all` runs one `DELETE` and skips callbacks. Like JPA `remove` vs a bulk JPQL delete.
+
+**Step 5: Write request tests.**
+
+- Delete returns 204 and an empty body; `assert_difference("Todo.count", -1)`.
+- A later `GET` of the same id returns 404.
+- Unknown id returns 404.
+
+**What to notice:** `resources :todos` now replaces five mapping annotations. Read the `bin/rails routes` table it generated.
+
+</details>
+
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: cyan;"><b>Definition of done and conventions</b></span></summary>
 
 A story is done only when both tracks meet the same bar; this keeps the comparison honest.
 
 **Definition of done (every story, both tracks)**
 
 - [ ] Acceptance criteria covered by request-level tests against real Postgres
-- [ ] `./gradlew build` and `bin/rails test` green; Spotless and `bin/rubocop` clean
+- [ ] `./gradlew build` and `bin/rails test` green; Spotless, `bin/rubocop` and `bin/brakeman` clean
 - [ ] Schema changes only through a new migration, never by editing an applied one
 - [ ] Same request in `requests.http` returns the same status and JSON shape from both apps
 - [ ] One short note per story in `LEARNINGS.md`: what was easier, what was surprising
@@ -216,7 +930,11 @@ A story is done only when both tracks meet the same bar; this keeps the comparis
 **Clean code conventions**
 
 - Spring: one flat `com.example.todo` package (split by feature only when a second feature arrives), constructor injection only, Java records for DTOs, no entities in API responses, `@Transactional` at the service layer, `ProblemDetail` for errors, Testcontainers over H2
-- Rails: follow the generators' naming (`Todo` model, `todos` table, `Api::TodosController`), skinny controllers, `params.expect` for strong parameters, `before_action` for shared lookups, `rescue_from` for errors, fixtures for test data, no service objects until a model method gets too big
-- Both: one commit per story per track, small focused PRs if you use GitHub, and a CI workflow (Rails generates one in `.github/workflows/ci.yml`; add the equivalent Gradle job)
+- Rails: follow the generators' naming (`Todo` model, `todos` table, `Api::TodosController`), skinny controllers, `params.expect` with separate create and update parameter methods, `before_action` for shared lookups, `rescue_from` for errors, fixtures for test data, no service objects until a model method gets too big
+- Both: one commit per story per track, small focused PRs if you use GitHub, and a CI workflow. Rails generated one in `rails-todo/.github/workflows/ci.yml`; move it to the repo-root `.github/workflows/`, set `working-directory: rails-todo`, and add the equivalent Gradle job
 
 **After this plan:** add user accounts with Rails 8's built-in authentication generator (`bin/rails generate authentication`) and compare it with Spring Security; then deploy each app to compare packaging (fat JAR or container vs Kamal).
+
+</details>
+
+---
