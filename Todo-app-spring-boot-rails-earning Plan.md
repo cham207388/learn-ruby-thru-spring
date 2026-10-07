@@ -671,10 +671,10 @@ bin/rails db:migrate
 
 **Checklist**
 
-- [ ] `datetime_type = :timestamptz` set before the first migration
-- [ ] Migration has `null: false`, `limit: 200`, `default: false`, `t.timestamps`
-- [ ] `\d todos` matches the spec (except `bigserial`)
-- [ ] Rollback and re-migrate practiced; `db/schema.rb` committed
+- [x] `datetime_type = :timestamptz` set before the first migration
+- [x] Migration has `null: false`, `limit: 200`, `default: false`, `t.timestamps`
+- [x] `\d todos` matches the spec (except `bigserial`)
+- [x] Rollback and re-migrate practiced; `db/schema.rb` committed
 
 <details>
 <summary><span style="font-weight: bold; color: pink;"><b>Validate</b></span></summary>
