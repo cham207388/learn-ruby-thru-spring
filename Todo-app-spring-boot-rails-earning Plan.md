@@ -75,7 +75,8 @@ Phase 1 ends when both apps boot, connect to the same Postgres 18 container, and
 - [x] Two databases created by an init script: `todo_spring` and `todo_rails_development` (+ `todo_rails_test`)
 - [x] Credentials come from environment variables, never committed
 
-**Validate**
+<details>
+<summary><span style="font-weight: bold; color: pink;"><b>Validate</b></span></summary>
 
 Run from repo root.
 
@@ -93,6 +94,9 @@ Run from repo root.
 
 </details>
 
+
+</details>
+
 ---
 
 <details>
@@ -106,7 +110,8 @@ Run from repo root.
 - [x] Single feature package: entity, repository, service, controller and DTOs live directly in `com.example.todo`, next to the application class
 - [x] Spotless configured; `./gradlew build` passes; `/actuator/health` returns UP
 
-**Validate**
+<details>
+<summary><span style="font-weight: bold; color: pink;"><b>Validate</b></span></summary>
 
 Run from repo root.
 
@@ -123,6 +128,8 @@ Run from repo root.
 
 - Stop the app with `Ctrl-C` in terminal 1.
 - Step 2 tests use Testcontainers, so Docker must run. They do not use the compose container.
+
+</details>
 
 </details>
 
@@ -250,7 +257,8 @@ Done when you can read `validates :title, presence: true, length: { maximum: 200
 - [ ] libpq present
 - [ ] irb drill done; one note in `LEARNINGS.md`
 
-**Validate**
+<details>
+<summary><span style="font-weight: bold; color: pink;"><b>Validate</b></span></summary>
 
 Run from repo root.
 
@@ -264,6 +272,8 @@ Run from repo root.
 | 6 | `git ls-files mise.toml` | `mise.toml` |
 
 - Make targets load `.env` on their own. Steps 4 and 5 check mise, which you need when you run `bin/rails` directly.
+
+</details>
 
 </details>
 
@@ -432,7 +442,8 @@ git commit -m "US-1.4 Rails skeleton"
 
 **What to notice:** Rails generated a health check, lint, security scans and CI config without asking. `Gemfile` vs `build.gradle.kts`: no plugins, no tasks, only dependencies; tasks live in `bin/rails`. Run `bin/rails -T` to list them, like `./gradlew tasks`.
 
-**Validate**
+<details>
+<summary><span style="font-weight: bold; color: pink;"><b>Validate</b></span></summary>
 
 Run from repo root.
 
@@ -449,6 +460,8 @@ Run from repo root.
 | 9 | `make rails-lint` | `no offenses detected` |
 | 10 | `make rails-security` | Brakeman `No warnings found`; bundler-audit `No vulnerabilities found` |
 | 11 | `cat LEARNINGS.md` | one line per row of the folder map |
+
+</details>
 
 </details>
 
@@ -546,7 +559,8 @@ bin/rails db:migrate
 - [ ] `\d todos` matches the spec (except `bigserial`)
 - [ ] Rollback and re-migrate practiced; `db/schema.rb` committed
 
-**Validate**
+<details>
+<summary><span style="font-weight: bold; color: pink;"><b>Validate</b></span></summary>
 
 Run from repo root with the container up (`make compose-up`).
 
@@ -574,6 +588,8 @@ Run from repo root with the container up (`make compose-up`).
 | # | Command | Expect |
 | --- | --- | --- |
 | 10 | `make db-compare` | same column names, types and nullability in both DBs; `title` max length 200; only the `id` default differs (identity vs `nextval`) |
+
+</details>
 
 </details>
 
@@ -674,7 +690,8 @@ bin/rails test
 
 **What to notice:** the Rails model has no fields. Active Record reads columns from Postgres at boot. Validation and persistence live in one class; Spring splits them across entity, repository and DTO. The console against your live model has no real Spring equivalent and will speed up every later story.
 
-**Validate**
+<details>
+<summary><span style="font-weight: bold; color: pink;"><b>Validate</b></span></summary>
 
 Run from repo root with the container up.
 
@@ -688,6 +705,8 @@ Run from repo root with the container up.
 | 6 | `make spring-lint rails-lint` | both clean |
 
 - Test report for Spring: `spring-todo/build/reports/tests/test/index.html`.
+
+</details>
 
 </details>
 
@@ -833,7 +852,8 @@ body = response.parsed_body
 
 *Rails stretch:* add an HTML `new`/`create` with a form helper and Turbo, to see full-stack Rails.
 
-**Validate**
+<details>
+<summary><span style="font-weight: bold; color: pink;"><b>Validate</b></span></summary>
 
 **Automated**
 
@@ -853,6 +873,8 @@ body = response.parsed_body
 | 7 | `make api-create APP=spring BODY='{"title":"x","id":999,"completed":true}'` | `201`, new id (not 999), `completed: false` |
 | 8 | `make api-shape` | same key list from both apps |
 | 9 | `make api-shape BODY='{"title":""}'` | same Problem Details keys from both apps |
+
+</details>
 
 </details>
 
@@ -930,7 +952,8 @@ Todo.by_completed(true).to_a
 
 **What to notice:** scopes are chainable and lazy. Watch the SQL in the Rails log and use `.to_sql` in the console, the way you would turn on `show-sql` in Hibernate.
 
-**Validate**
+<details>
+<summary><span style="font-weight: bold; color: pink;"><b>Validate</b></span></summary>
 
 **Automated**
 
@@ -951,6 +974,8 @@ Todo.by_completed(true).to_a
 | 8 | `make api-get APP=spring ID=<id>` | `200`, that todo |
 | 9 | `make api-get APP=spring ID=999999` | `404`, `Content-Type: application/problem+json` |
 | 10 | `make api-list-shape` | same page keys and item keys from both apps |
+
+</details>
 
 </details>
 
@@ -1018,7 +1043,8 @@ todo.save
 
 **What to notice:** `before_action` handles cross-cutting code. Both stacks track changes: Hibernate dirty checking vs Active Record `changed?` / `saved_changes`.
 
-**Validate**
+<details>
+<summary><span style="font-weight: bold; color: pink;"><b>Validate</b></span></summary>
 
 **Automated**
 
@@ -1037,6 +1063,8 @@ todo.save
 | 6 | `make api-update APP=spring ID=<id> BODY='{"title":""}'` | `422` Problem Details |
 | 7 | `make api-update APP=spring ID=999999` | `404` Problem Details |
 | 8 | `make api-get APP=spring ID=<id>` | changes from steps 4 and 5 persisted |
+
+</details>
 
 </details>
 
@@ -1084,7 +1112,8 @@ Todo.where(title: "b").delete_all
 
 **What to notice:** `resources :todos` now replaces five mapping annotations. Read the `bin/rails routes` table it generated.
 
-**Validate**
+<details>
+<summary><span style="font-weight: bold; color: pink;"><b>Validate</b></span></summary>
 
 **Automated**
 
@@ -1103,6 +1132,8 @@ Todo.where(title: "b").delete_all
 | 6 | `make api-delete APP=spring ID=999999` | `404` Problem Details |
 
 **Phase 3 complete:** run `make check`. Both apps green means every story passes its tests, lint and scans.
+
+</details>
 
 </details>
 

@@ -1,0 +1,5 @@
+[tools]
+ruby = "4.0.7"
+
+[env]
+_.file = ".env"
