@@ -11,7 +11,7 @@ Build the same Todo REST API twice, Spring Boot first and Rails second, story by
 
 **Scope decision:** both apps are JSON APIs so the comparison stays apples-to-apples. Each CRUD story has an optional Rails stretch (HTML views with Hotwire) because that is where Rails differs most from Spring.
 
-### Tech stack (as of Oct 2026)
+**Tech stack (as of Oct 2026)**
 
 | Layer | Spring track | Rails track |
 | --- | --- | --- |
@@ -65,7 +65,7 @@ Most Spring concepts have a direct Rails counterpart; the big shift is from expl
 Phase 1 ends when both apps boot, connect to the same Postgres 18 container, and pass one smoke test each. Repo layout: one monorepo with `spring-todo/`, `rails-todo/`, `compose.yml`, and `requests.http` at the root.
 
 <details>
-<summary>US-1.1 Shared database</summary>
+<summary><span style="font-weight: bold; color: green;"><b>US-1.1 Shared database</b></span></summary>
 
 *As a developer, I want one Postgres 18 instance in Docker so both apps use the same database engine with no local install.*
 
@@ -78,7 +78,7 @@ Phase 1 ends when both apps boot, connect to the same Postgres 18 container, and
 ---
 
 <details>
-<summary>US-1.2 Spring Boot skeleton</summary>
+<summary><span style="font-weight: bold; color: green;"><b>US-1.2 Spring Boot skeleton</b></span></summary>
 
 *As a developer, I want a Spring Boot 4.1 project on Java 25 and Gradle 9.6 so I have a known-good baseline.*
 
@@ -93,7 +93,7 @@ Phase 1 ends when both apps boot, connect to the same Postgres 18 container, and
 ---
 
 <details>
-<summary>US-1.3 Ruby toolchain (mise)</summary>
+<summary><span style="font-weight: bold; color: green;"><b>US-1.3 Ruby toolchain (mise)</b></span></summary>
 
 *As a Java developer, I want a version-managed Ruby 4.0 install so Ruby works like SDKMAN-managed JDKs.*
 
@@ -219,7 +219,7 @@ Done when you can read `validates :title, presence: true, length: { maximum: 200
 ---
 
 <details>
-<summary>US-1.4 Rails skeleton</summary>
+<summary><span style="font-weight: bold; color: green;"><b>US-1.4 Rails skeleton</b></span></summary>
 
 *As a developer, I want a Rails 8.1 API app on Postgres so I can compare it file by file with the Spring project.*
 
@@ -397,7 +397,7 @@ Phase 2 creates the `todos` table through a migration in each stack and maps it 
 **Table `todos`:** `id` bigint identity PK · `title` varchar(200) not null · `description` text null · `completed` boolean not null default false · `due_date` date null · `created_at` / `updated_at` timestamptz not null.
 
 <details>
-<summary>US-2.1 Create the todos table</summary>
+<summary><span style="font-weight: bold; color: green;"><b>US-2.1 Create the todos table</b></span></summary>
 
 *As a developer, I want the schema defined in versioned migrations so every environment builds the same database.*
 
@@ -482,7 +482,7 @@ bin/rails db:migrate
 ---
 
 <details>
-<summary>US-2.2 Map the Todo model</summary>
+<summary><span style="font-weight: bold; color: green;"><b>US-2.2 Map the Todo model</b></span></summary>
 
 *As a developer, I want a Todo domain model with validation so invalid data never reaches the table.*
 
@@ -595,7 +595,7 @@ Build these four in order; each adds one new Rails idea on top of the last. Both
 | US-3.3 Update | `PATCH /api/todos/{id}` | 200 + body | 404, 422 |
 | US-3.4 Delete | `DELETE /api/todos/{id}` | 204 | 404 |
 
-### Shared JSON contract
+**Shared JSON contract**
 
 Both apps must return the same JSON shape. Decide it once here:
 
@@ -617,7 +617,7 @@ Both apps must return the same JSON shape. Decide it once here:
 - `errors` maps field names to message lists. Message text may differ between stacks; keys and shape must not. Spring: `problemDetail.setProperty("errors", map)`.
 
 <details>
-<summary>US-3.1 Create a todo</summary>
+<summary><span style="font-weight: bold; color: green;"><b>US-3.1 Create a todo</b></span></summary>
 
 *As a user, I want to create a todo with a title and optional description and due date so I can track what I need to do.*
 
@@ -725,7 +725,7 @@ body = response.parsed_body
 ---
 
 <details>
-<summary>US-3.2 View todos</summary>
+<summary><span style="font-weight: bold; color: green;"><b>US-3.2 View todos</b></span></summary>
 
 *As a user, I want to see all my todos and a single todo so I know what is outstanding.*
 
@@ -801,7 +801,7 @@ Todo.by_completed(true).to_a
 ---
 
 <details>
-<summary>US-3.3 Update a todo</summary>
+<summary><span style="font-weight: bold; color: green;"><b>US-3.3 Update a todo</b></span></summary>
 
 *As a user, I want to edit a todo and mark it complete so my list stays accurate.*
 
@@ -867,7 +867,7 @@ todo.save
 ---
 
 <details>
-<summary>US-3.4 Delete a todo</summary>
+<summary><span style="font-weight: bold; color: green;"><b>US-3.4 Delete a todo</b></span></summary>
 
 *As a user, I want to delete a todo I no longer need so my list stays clean.*
 
