@@ -28,6 +28,8 @@ dependencies {
     implementation(libs.flyway.database.postgresql)
     runtimeOnly(libs.postgresql)
     developmentOnly(libs.spring.boot.docker.compose)
+    compileOnly(libs.lombok)
+    annotationProcessor(libs.lombok)
 
     testImplementation(libs.spring.boot.starter.data.jpa.test)
     testImplementation(libs.spring.boot.starter.flyway.test)
@@ -36,6 +38,8 @@ dependencies {
     testImplementation(libs.testcontainers.junit.jupiter)
     testImplementation(libs.testcontainers.postgresql)
     testRuntimeOnly(libs.junit.platform.launcher)
+    testCompileOnly(libs.lombok)
+    testAnnotationProcessor(libs.lombok)
 }
 
 spotless {

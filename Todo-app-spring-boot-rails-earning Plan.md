@@ -109,7 +109,7 @@ Run from repo root.
 - [x] Generated from start.spring.io: Gradle Kotlin DSL, Java 25, dependencies Web, Data JPA, Validation, PostgreSQL Driver, Flyway, Actuator, Testcontainers, Docker Compose support
 - [x] Java toolchain set to 25 in `build.gradle.kts`; dependency versions in `gradle/libs.versions.toml`
 - [x] `spring.jpa.hibernate.ddl-auto=validate` (Flyway owns the schema) and `spring.jpa.open-in-view=false`
-- [x] Single feature package: entity, repository, service, controller and DTOs live directly in `com.example.todo`, next to the application class
+- [x] Package by layer under `com.example.todo`: `entity`, `repository`, `service`, `controller`, `dto`, `config`
 - [x] Spotless configured; `./gradlew build` passes; `/actuator/health` returns UP
 
 <details>
@@ -124,7 +124,7 @@ Run from repo root.
 | 3 | `make spring-lint` | `BUILD SUCCESSFUL` |
 | 4 | `grep -n languageVersion spring-todo/build.gradle.kts` | `JavaLanguageVersion.of(25)` |
 | 5 | `grep -nE 'ddl-auto\|open-in-view' spring-todo/src/main/resources/application.yaml` | `open-in-view: false`, `ddl-auto: validate` |
-| 6 | `ls spring-todo/src/main/java/com/example/todo` | `SpringTodoApplication.java` only, no sub-packages |
+| 6 | `ls spring-todo/src/main/java/com/example/todo` | `SpringTodoApplication.java` plus layer packages (`config`, `entity`, `repository`, ...) |
 | 7 | `make spring-run` (terminal 1) | log has `Database: jdbc:postgresql://localhost:5423/todo_spring` and `Started SpringTodoApplication` |
 | 8 | `make spring-health` (terminal 2) | `{"groups":["liveness","readiness"],"status":"UP"}` |
 
@@ -717,7 +717,7 @@ Run from repo root with the container up (`make compose-up`).
 
 *As a developer, I want a Todo domain model with validation so invalid data never reaches the table.*
 
-**Spring track:** `Todo` `@Entity` with `@GeneratedValue(strategy = IDENTITY)`, `@NotBlank @Size(max = 200) title`, audit timestamps via Spring Data JPA auditing (`@EnableJpaAuditing` on a separate `JpaAuditingConfig` class, `@EntityListeners(AuditingEntityListener.class)` on the entity, `@CreatedDate` / `@LastModifiedDate` on `Instant` fields; `createdBy` / `lastModifiedBy` wait for user accounts); `TodoRepository extends JpaRepository<Todo, Long>`; no Lombok needed, keep the entity small. Repository test with Testcontainers that saves a valid todo and rejects a blank title.
+**Spring track:** `Todo` `@Entity` with `@GeneratedValue(strategy = IDENTITY)`, `@NotBlank @Size(max = 200) title`, audit timestamps via Spring Data JPA auditing (`@EnableJpaAuditing` on a separate `JpaAuditingConfig` class, `@EntityListeners(AuditingEntityListener.class)` on the entity, `@CreatedDate` / `@LastModifiedDate` on `Instant` fields; `createdBy` / `lastModifiedBy` wait for user accounts); `TodoRepository extends JpaRepository<Todo, Long>`; Lombok `@Getter`/`@Setter` plus a protected no-args constructor, not `@Data`; keep the entity small. Repository test with Testcontainers that saves a valid todo and rejects a blank title.
 
 **Rails track**
 
@@ -1275,7 +1275,7 @@ A story is done only when both tracks meet the same bar; this keeps the comparis
 
 **Clean code conventions**
 
-- Spring: one flat `com.example.todo` package (split by feature only when a second feature arrives), constructor injection only, Java records for DTOs, no entities in API responses, `@Transactional` at the service layer, `ProblemDetail` for errors, Testcontainers over H2
+- Spring: package by layer under `com.example.todo` (`entity`, `repository`, `service`, `controller`, `dto`, `config`), Lombok `@Getter`/`@Setter` on entities (never `@Data`), constructor injection only, Java records for DTOs, no entities in API responses, `@Transactional` at the service layer, `ProblemDetail` for errors, Testcontainers over H2
 - Rails: follow the generators' naming (`Todo` model, `todos` table, `Api::TodosController`), skinny controllers, `params.expect` with separate create and update parameter methods, `before_action` for shared lookups, `rescue_from` for errors, fixtures for test data, no service objects until a model method gets too big
 - Both: one commit per story per track, small focused PRs if you use GitHub, and a CI workflow. Rails generated one in `rails-todo/.github/workflows/ci.yml`; move it to the repo-root `.github/workflows/`, set `working-directory: rails-todo`, and add the equivalent Gradle job
 
