@@ -801,9 +801,9 @@ bin/rails test
 
 **Checklist**
 
-- [ ] `app/models/todo.rb` written by hand, with presence and length validation
-- [ ] Console steps done; `NotNullViolation` vs `RecordInvalid` difference noted in `LEARNINGS.md`
-- [ ] Fixtures and model tests pass; `bin/rubocop` clean
+- [x] `app/models/todo.rb` written by hand, with presence and length validation
+- [x] Console steps done; `NotNullViolation` vs `RecordInvalid` difference noted in `LEARNINGS.md`
+- [x] Fixtures and model tests pass; `bin/rubocop` clean
 
 **What to notice:** both stacks fill timestamps for free. Spring needs `@EnableJpaAuditing` plus annotations; Rails fills any column named `created_at` / `updated_at`. Both skip it on bulk writes: JPQL `UPDATE` and Rails `update_all` leave `updated_at` alone. The Rails model has no fields. Active Record reads columns from Postgres at boot. Validation and persistence live in one class; Spring splits them across entity, repository and DTO. The console against your live model has no real Spring equivalent and will speed up every later story.
 
