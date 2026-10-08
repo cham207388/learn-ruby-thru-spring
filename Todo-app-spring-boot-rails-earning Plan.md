@@ -894,7 +894,7 @@ Both apps must return the same JSON shape. Decide it once here:
 | `TodoControllerTest` | `@SpringBootTest` + `@AutoConfigureMockMvc` + `MockMvcTester` against Testcontainers: success with `Location`, blank title, long title, ignored fields, malformed JSON |
 | `springdoc-openapi-starter-webmvc-ui` 3.1.1 | OpenAPI 3.1 JSON at `/v3/api-docs`, Swagger UI at `/swagger-ui.html`. Version 3.x targets Spring Boot 4 |
 | `config/OpenApiConfig` | API title and version. A `ModelResolver` bean with snake_case naming, because swagger-core uses its own Jackson 2 mapper and ignores `spring.jackson.property-naming-strategy` |
-| `TodoController` annotations | `@Tag`, `@Operation`, `@ApiResponse` for 201 (`TodoResponse`) and 422 (`application/problem+json`) |
+| `controller/TodoApi` | Interface with the HTTP contract: OpenAPI `@Tag`, `@Operation`, `@ApiResponse` (201 `TodoResponse`, 422 `application/problem+json`), mappings, `@Valid @RequestBody`. `TodoController implements TodoApi` and keeps only `@RestController`, `@RequestMapping("/api/todos")` and method bodies |
 
 **Rails track**
 
@@ -1225,7 +1225,7 @@ end
 | `service/TodoService` | `list(completed, page, size)` and `get(id)` with `@Transactional(readOnly = true)`. Sort `created_at desc, id desc`. Clamps `page` to at least 1 and `size` to 1..100 |
 | `exception/TodoNotFoundException` | Thrown by `get` for an unknown id |
 | `GlobalExceptionHandler` | `@ExceptionHandler(TodoNotFoundException)` returns 404 `ProblemDetail` with detail `Todo <id> not found` |
-| `TodoController` | `@GetMapping` with `@RequestParam` `completed` (optional), `page` (default 1), `size` (default 20); `@GetMapping("/{id}")`. OpenAPI `@Operation`, `@Parameter`, 404 `@ApiResponse` |
+| `TodoApi` / `TodoController` | `TodoApi` declares `@GetMapping` with `@RequestParam` `completed` (optional), `page` (default 1), `size` (default 20), `@GetMapping("/{id}")`, and OpenAPI `@Operation`, `@Parameter`, 404 `@ApiResponse`. `TodoController` implements both methods |
 | `TodoControllerTest` | Newest first with page metadata, filter true/false, `page=2&size=1`, `size=500` clamps to 100, show 200, unknown id 404 Problem Details |
 
 - Spring rejects `?completed=abc` with 400 Problem Details (`Failed to convert 'completed' with value: 'abc'`). Rails `ActiveModel::Type::Boolean` casts any unknown string to `true`. Note the difference in `LEARNINGS.md`.
@@ -1494,7 +1494,7 @@ A story is done only when both tracks meet the same bar; this keeps the comparis
 
 **Clean code conventions**
 
-- Spring: package by layer under `com.example.todo` (`entity`, `repository`, `service`, `controller`, `dto`, `config`), Lombok `@Getter`/`@Setter` on entities (never `@Data`), constructor injection only, Java records for DTOs, no entities in API responses, `@Transactional` at the service layer, `ProblemDetail` for errors, Testcontainers over H2
+- Spring: package by layer under `com.example.todo` (`entity`, `repository`, `service`, `controller`, `dto`, `config`), Lombok `@Getter`/`@Setter` on entities (never `@Data`), constructor injection only, Java records for DTOs, no entities in API responses, `@Transactional` at the service layer, `ProblemDetail` for errors, HTTP contract and OpenAPI annotations on a `TodoApi` interface (annotate once, never repeat on the controller), Testcontainers over H2
 - Rails: follow the generators' naming (`Todo` model, `todos` table, `Api::TodosController`), skinny controllers, `params.expect` with separate create and update parameter methods, `before_action` for shared lookups, `rescue_from` for errors, fixtures for test data, no service objects until a model method gets too big
 - Both: one commit per story per track, small focused PRs if you use GitHub, and a CI workflow. Rails generated one in `rails-todo/.github/workflows/ci.yml`; move it to the repo-root `.github/workflows/`, set `working-directory: rails-todo`, and add the equivalent Gradle job
 
