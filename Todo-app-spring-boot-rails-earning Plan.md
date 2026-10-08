@@ -1216,7 +1216,19 @@ end
 - [ ] Unknown id returns 404 Problem Details
 - [ ] Tests cover list, filter, show and 404
 
-**Spring track:** `TodoRepository.findByCompleted(boolean, Pageable)` derived query; `Page<TodoResponse>` mapped to the shared `PageResponse` shape; throw a `TodoNotFoundException` handled in the advice; `@Transactional(readOnly = true)` on reads.
+**Spring track** (done)
+
+| File | Role |
+| --- | --- |
+| `repository/TodoRepository` | Derived query `Page<Todo> findByCompleted(boolean, Pageable)`. Spring Data writes the `SELECT ... LIMIT/OFFSET` and the `COUNT` query |
+| `dto/PageResponse<T>` | Shared list shape `{items, page, size, total}`. Converts Spring's 0-based `Page` to 1-based `page` |
+| `service/TodoService` | `list(completed, page, size)` and `get(id)` with `@Transactional(readOnly = true)`. Sort `created_at desc, id desc`. Clamps `page` to at least 1 and `size` to 1..100 |
+| `exception/TodoNotFoundException` | Thrown by `get` for an unknown id |
+| `GlobalExceptionHandler` | `@ExceptionHandler(TodoNotFoundException)` returns 404 `ProblemDetail` with detail `Todo <id> not found` |
+| `TodoController` | `@GetMapping` with `@RequestParam` `completed` (optional), `page` (default 1), `size` (default 20); `@GetMapping("/{id}")`. OpenAPI `@Operation`, `@Parameter`, 404 `@ApiResponse` |
+| `TodoControllerTest` | Newest first with page metadata, filter true/false, `page=2&size=1`, `size=500` clamps to 100, show 200, unknown id 404 Problem Details |
+
+- Spring rejects `?completed=abc` with 400 Problem Details (`Failed to convert 'completed' with value: 'abc'`). Rails `ActiveModel::Type::Boolean` casts any unknown string to `true`. Note the difference in `LEARNINGS.md`.
 
 **Rails track**
 

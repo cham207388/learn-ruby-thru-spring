@@ -3,7 +3,9 @@ package com.example.todo.controller;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.example.todo.TestcontainersConfiguration;
+import com.example.todo.entity.Todo;
 import com.example.todo.repository.TodoRepository;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -96,5 +98,82 @@ class TodoControllerTest {
 
         assertThat(result).hasStatus(HttpStatus.BAD_REQUEST);
         assertThat(result).hasContentType(MediaType.APPLICATION_PROBLEM_JSON);
+    }
+
+    private Todo saveTodo(String title, boolean completed) {
+        Todo todo = new Todo(title);
+        todo.setCompleted(completed);
+        return repository.saveAndFlush(todo);
+    }
+
+    @Test
+    void listsNewestFirstWithPageMetadata() {
+        saveTodo("first", false);
+        saveTodo("second", true);
+        saveTodo("third", false);
+
+        MvcTestResult result = mvc.get().uri("/api/todos").exchange();
+
+        assertThat(result).hasStatus(HttpStatus.OK);
+        assertThat(result).bodyJson().extractingPath("$.items[*].title").isEqualTo(List.of("third", "second", "first"));
+        assertThat(result).bodyJson().extractingPath("$.page").isEqualTo(1);
+        assertThat(result).bodyJson().extractingPath("$.size").isEqualTo(20);
+        assertThat(result).bodyJson().extractingPath("$.total").isEqualTo(3);
+    }
+
+    @Test
+    void filtersByCompleted() {
+        saveTodo("open", false);
+        saveTodo("done", true);
+
+        assertThat(mvc.get().uri("/api/todos?completed=true").exchange())
+                .bodyJson()
+                .extractingPath("$.items[*].title")
+                .isEqualTo(List.of("done"));
+        assertThat(mvc.get().uri("/api/todos?completed=false").exchange())
+                .bodyJson()
+                .extractingPath("$.items[*].title")
+                .isEqualTo(List.of("open"));
+    }
+
+    @Test
+    void paginatesWithOneBasedPages() {
+        saveTodo("first", false);
+        saveTodo("second", false);
+        saveTodo("third", false);
+
+        MvcTestResult result = mvc.get().uri("/api/todos?page=2&size=1").exchange();
+
+        assertThat(result).bodyJson().extractingPath("$.items[*].title").isEqualTo(List.of("second"));
+        assertThat(result).bodyJson().extractingPath("$.page").isEqualTo(2);
+        assertThat(result).bodyJson().extractingPath("$.size").isEqualTo(1);
+        assertThat(result).bodyJson().extractingPath("$.total").isEqualTo(3);
+    }
+
+    @Test
+    void clampsSizeTo100() {
+        assertThat(mvc.get().uri("/api/todos?size=500").exchange())
+                .bodyJson()
+                .extractingPath("$.size")
+                .isEqualTo(100);
+    }
+
+    @Test
+    void getsOneTodo() {
+        Todo todo = saveTodo("Buy milk", false);
+
+        MvcTestResult result = mvc.get().uri("/api/todos/{id}", todo.getId()).exchange();
+
+        assertThat(result).hasStatus(HttpStatus.OK);
+        assertThat(result).bodyJson().extractingPath("$.title").isEqualTo("Buy milk");
+    }
+
+    @Test
+    void unknownIdReturns404ProblemDetails() {
+        MvcTestResult result = mvc.get().uri("/api/todos/999999").exchange();
+
+        assertThat(result).hasStatus(HttpStatus.NOT_FOUND);
+        assertThat(result).hasContentType(MediaType.APPLICATION_PROBLEM_JSON);
+        assertThat(result).bodyJson().extractingPath("$.detail").isEqualTo("Todo 999999 not found");
     }
 }
