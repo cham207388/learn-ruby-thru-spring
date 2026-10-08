@@ -1,5 +1,4 @@
 class Api::TodosController < ApplicationController
-
   # @summary Create a todo
   # @tags Todos
   # @request_body The todo to create [!Hash{title: String, description: String, due_date: String}]

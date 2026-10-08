@@ -10,5 +10,3 @@ OasRails.configure do |config|
   config.authenticate_all_routes_by_default = false
   config.set_default_responses = false
 end
-
-

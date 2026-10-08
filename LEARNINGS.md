@@ -175,3 +175,93 @@ implementation("org.springframework.boot:spring-boot-starter-jetty")
 
 
 </details>
+<details>
+<summary><span style="font-weight: bold; color: rgb(153, 184, 255);"><b>Rails routes: what <code>namespace :api</code> does</b></span></summary>
+
+```ruby
+# config/routes.rb
+namespace :api do
+  resources :todos, only: %i[create show]
+end
+```
+
+**Key fact first:** `namespace :api` is not only a URL prefix. It sets four things at once: URL prefix, controller module, folder and route helper prefix. `resources :todos` adds the resource part to each of the four.
+
+### 1. What `namespace :api` adds
+
+| Effect | Rails value | Spring Boot equivalent |
+| --- | --- | --- |
+| URL prefix | `/api` | `@RequestMapping("/api")` on the controller class (or a shared base path) |
+| Controller module | `Api::` | Java package, e.g. `com.example.todo.api` |
+| Folder | `app/controllers/api/` | Package folder `src/main/java/com/example/todo/api/` |
+| Route helper prefix | `api_` | No equivalent. Spring builds links with `ServletUriComponentsBuilder` or `MvcUriComponentsBuilder` |
+
+### 2. What `resources :todos` adds
+
+| Effect | Rails value | Spring Boot equivalent |
+| --- | --- | --- |
+| URL segment | `/todos` | `@RequestMapping("/todos")` (combined: `@RequestMapping("/api/todos")`) |
+| Controller class name | `TodosController` | `TodoController` class you name yourself |
+| Actions (`only:` limits them) | `create`, `show` | `@PostMapping`, `@GetMapping("/{id}")` methods |
+| Route helper base | `todos` (collection), `todo` (one record) | No equivalent |
+
+### 3. Together: the full mapping
+
+| Request | Rails controller#action | Rails helper | Spring Boot |
+| --- | --- | --- | --- |
+| `POST /api/todos` | `Api::TodosController#create` | `api_todos_url` | `@PostMapping` in `TodoController` |
+| `GET /api/todos/:id` | `Api::TodosController#show` | `api_todo_url(todo)` | `@GetMapping("/{id}")` in `TodoController` |
+
+Each column is namespace part plus resources part:
+
+- URL: `/api` + `/todos`
+- Class: `Api::` + `TodosController`
+- File: `app/controllers/api/` + `todos_controller.rb`
+- Helper: `api_` + `todo` + `_url`
+
+### 4. How Rails finds the code for `POST /api/todos`
+
+| Step | Rails | Spring Boot |
+| --- | --- | --- |
+| 1. Match | Route table matches `api/todos#create` | `DispatcherServlet` matches `@PostMapping` on `/api/todos` |
+| 2. Name | Converts `api/todos` to class `Api::TodosController` | Already known: annotation sits on the class |
+| 3. Load | Zeitwerk loads `app/controllers/api/todos_controller.rb` | Class already loaded at startup by component scan |
+| 4. Call | New controller object per request, calls `create` | Singleton controller bean, calls the method |
+
+### 5. The key difference
+
+- **Spring:** URL and package are separate choices. `@RequestMapping("/api")` works in any package.
+- **Rails:** one name (`api`) drives URL, module, folder and helper. Convention over configuration. If one part does not match, Rails fails.
+
+| Mismatch | Error |
+| --- | --- |
+| Class not in module `Api` | `uninitialized constant Api::TodosController` |
+| File not in `app/controllers/api/` | `uninitialized constant Api::TodosController` |
+| Route missing | `ActionController::RoutingError (No route matches [POST] "/api/todos")` |
+| Helper used without the `show` route | `NoMethodError: undefined method 'api_todo_url'` |
+
+### 6. Split URL and module when needed
+
+| Route syntax | URL | Controller | Spring Boot equivalent |
+| --- | --- | --- | --- |
+| `namespace :api` | `/api/todos` | `Api::TodosController` | `/api` mapping, class in `api` package |
+| `scope "/api"` | `/api/todos` | `TodosController` | `/api` mapping, class in any package |
+| `scope module: :api` | `/todos` | `Api::TodosController` | No `/api` mapping, class in `api` package |
+
+### 7. Check it
+
+```bash
+make rails-routes
+```
+
+Columns: Prefix (helper name without `_url`/`_path`), Verb, URI Pattern, Controller#Action.
+
+```text
+   Prefix Verb URI Pattern              Controller#Action
+api_todos POST /api/todos(.:format)     api/todos#create
+ api_todo GET  /api/todos/:id(.:format) api/todos#show
+```
+
+Spring equivalent: the `Mapped "{[/api/todos],methods=[POST]}"` lines in debug logs, or the Actuator `mappings` endpoint (`management.endpoints.web.exposure.include: mappings`).
+
+</details>
