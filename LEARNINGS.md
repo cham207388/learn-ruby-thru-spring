@@ -2,6 +2,9 @@
 
 ## User Stories
 
+`./gradlew bootRun` will automatically apply migrations if there is any. 
+`bin/rails server` does not. `bin/rails db:migrate` is needed to apply migrations.
+
 ## Extras
 
 <details>
