@@ -11,6 +11,9 @@ spring:
     url: jdbc:postgresql://localhost:${POSTGRES_PORT:5423}/todo_spring
     username: ${POSTGRES_USER:}
     password: ${POSTGRES_PASSWORD:}
+  jackson:
+    # JSON keys match the shared contract and Rails: due_date, created_at, ...
+    property-naming-strategy: SNAKE_CASE
   jpa:
     open-in-view: false
     hibernate:

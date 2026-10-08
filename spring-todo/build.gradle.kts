@@ -26,6 +26,7 @@ dependencies {
     implementation(libs.spring.boot.starter.validation)
     implementation(libs.spring.boot.starter.webmvc)
     implementation(libs.flyway.database.postgresql)
+    implementation(libs.springdoc.openapi.webmvc.ui)
     runtimeOnly(libs.postgresql)
     developmentOnly(libs.spring.boot.docker.compose)
     compileOnly(libs.lombok)

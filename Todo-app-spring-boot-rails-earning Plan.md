@@ -268,6 +268,7 @@ brew list libpq > /dev/null && echo libpq ok
 ```bash
 bundle config build.pg --with-pg-config=$(brew --prefix libpq)/bin/pg_config
 ```
+
 </details>
 
 ---
@@ -855,13 +856,15 @@ Both apps must return the same JSON shape. Decide it once here:
 
 ```json
 {
-  "type": "about:blank",
   "title": "Unprocessable Content",
   "status": 422,
   "detail": "Validation failed",
+  "instance": "/api/todos",
   "errors": { "title": ["can't be blank"] }
 }
 ```
+
+- `type` is omitted. RFC 9457 says a missing `type` means `about:blank`, and Spring's `ProblemDetail` leaves it out for that value. `instance` is the request path; Spring adds it automatically.
 
 - `errors` maps field names to message lists. Message text may differ between stacks; keys and shape must not. Spring: `problemDetail.setProperty("errors", map)`.
 
@@ -877,7 +880,17 @@ Both apps must return the same JSON shape. Decide it once here:
 - [ ] Unknown fields (e.g. `id`, `completed`) in the request are ignored, not saved
 - [ ] Request test covers success and both validation failures
 
-**Spring track:** `CreateTodoRequest` record with Bean Validation, `@Valid @RequestBody`, `TodoService.create` (`@Transactional`), `TodoResponse` record, `ResponseEntity.created(uri)`; `@RestControllerAdvice` maps `MethodArgumentNotValidException` to `ProblemDetail` with status 422.
+**Spring track** (done)
+
+| File | Role |
+| --- | --- |
+| `application.yaml` | `spring.jackson.property-naming-strategy: SNAKE_CASE` for `due_date`, `created_at`, ... |
+| `dto/CreateTodoRequest` | Record with `@NotBlank @Size(max = 200) title`, `description`, `dueDate`. Unknown JSON fields are ignored |
+| `dto/TodoResponse` | Record plus `from(Todo)`. The entity never leaves the service |
+| `service/TodoService` | `@Transactional create(request)`, constructor injection |
+| `controller/TodoController` | `@PostMapping`, `@Valid @RequestBody`, `ResponseEntity.created(location)` built with `ServletUriComponentsBuilder` |
+| `exception/GlobalExceptionHandler` | `@RestControllerAdvice` extending `ResponseEntityExceptionHandler`. Overrides `handleMethodArgumentNotValid` to return 422 `ProblemDetail` with `errors` keyed by snake_case field. Malformed JSON and other MVC errors also become Problem Details |
+| `TodoControllerTest` | `@SpringBootTest` + `@AutoConfigureMockMvc` + `MockMvcTester` against Testcontainers: success with `Location`, blank title, long title, ignored fields, malformed JSON |
 
 **Rails track**
 
@@ -899,6 +912,21 @@ bin/rails routes -g todos
 - Why `show` now: the `Location` header uses the `api_todo_url` helper, and that helper exists only when the `show` route exists. The `show` action comes in US-3.2.
 - `%i[create show]` is shorthand for `[:create, :show]`.
 
+<details>
+<summary>Code to type: <code>config/routes.rb</code></summary>
+
+```ruby
+Rails.application.routes.draw do
+  get "up" => "rails/health#show", as: :rails_health_check
+
+  namespace :api do
+    resources :todos, only: %i[create show]
+  end
+end
+```
+
+</details>
+
 **Step 2: Generate the controller.**
 
 ```bash
@@ -908,32 +936,48 @@ bin/rails generate controller Api::Todos
 - Expect: `app/controllers/api/todos_controller.rb` (empty class) and `test/controllers/api/todos_controller_test.rb`.
 - Why not `scaffold`: scaffold writes every line for you. Here you write each line.
 
-**Step 3: Add a Problem Details helper.** In `app/controllers/application_controller.rb`, add a private method:
+**Step 3: Add a Problem Details helper.** In `app/controllers/application_controller.rb`, add a private method `render_problem`.
+
+<details>
+<summary>Code to type: <code>app/controllers/application_controller.rb</code></summary>
 
 ```ruby
-private
+class ApplicationController < ActionController::API
+  private
 
-def render_problem(status:, detail:, errors: nil)
-  code = Rack::Utils.status_code(status)
-  body = { type: "about:blank", title: Rack::Utils::HTTP_STATUS_CODES[code], status: code, detail: detail }
-  body[:errors] = errors if errors
-  render json: body, status: code, content_type: "application/problem+json"
+  # Renders an RFC 9457 Problem Details response, same shape as Spring's ProblemDetail
+  def render_problem(status:, detail:, errors: nil)
+    code = Rack::Utils.status_code(status)
+    body = {
+      title: Rack::Utils::HTTP_STATUS_CODES[code],
+      status: code,
+      detail: detail,
+      instance: request.path
+    }
+    body[:errors] = errors if errors
+    render json: body, status: code, content_type: "application/problem+json"
+  end
 end
 ```
+
+</details>
 
 - Why here: every controller extends `ApplicationController`, so every controller can call it. Spring puts this in a separate `@RestControllerAdvice` class.
 - `Rack::Utils.status_code(:unprocessable_content)` turns a status symbol into `422`.
 - `body[:errors] = errors if errors` is a trailing `if`: Ruby's one-line conditional.
+- `private` applies to every method below it. Spring needs `private` on each method.
+- `request.path` gives `/api/todos`, the same `instance` value Spring returns.
 
 **Step 4: Write strong parameters.** In `Api::TodosController`, add a private method `create_params`:
 
 ```ruby
-params.expect(todo: [:title, :description, :due_date])
+params.expect(todo: [ :title, :description, :due_date ])
 ```
 
 - Why: this is the allow-list of fields a client may set. Every other key is dropped. A Java request record gives you this for free, because it only has the fields you declare.
 - `params.expect` is the Rails 8 style. When `todo` is missing or the wrong shape, it returns 400 instead of raising a 500.
 - The body is flat (`{"title": "x"}`), but `expect` looks under `todo`. Rails `wrap_parameters` copies JSON keys that match `Todo` columns under a `todo` key for you. Check the server log: `Parameters: {"title" => "x", "todo" => {"title" => "x"}}`.
+- The spaces inside `[ ... ]` are RuboCop Rails Omakase style. Without them, `bin/rubocop` reports `Layout/SpaceInsideArrayLiteralBrackets`.
 
 **Step 5: Write the `create` action.**
 
@@ -943,7 +987,32 @@ params.expect(todo: [:title, :description, :due_date])
 - Failure: call `render_problem` with `:unprocessable_content`, a `detail`, and `errors: todo.errors.to_hash`.
 - Why `save`, not `save!`: invalid input is an expected path. Do not use exceptions for normal control flow.
 
-**Step 6: Try it by hand.** Start `bin/rails server`. In `requests.http` at repo root (or with `curl -i`), send:
+<details>
+<summary>Code to type: <code>app/controllers/api/todos_controller.rb</code></summary>
+
+```ruby
+class Api::TodosController < ApplicationController
+  def create
+    todo = Todo.new(create_params)
+
+    if todo.save
+      render json: todo, status: :created, location: api_todo_url(todo)
+    else
+      render_problem(status: :unprocessable_content, detail: "Validation failed", errors: todo.errors.to_hash)
+    end
+  end
+
+  private
+
+  def create_params
+    params.expect(todo: [ :title, :description, :due_date ])
+  end
+end
+```
+
+</details>
+
+**Step 6: Try it by hand.** Start `make rails-run`. In a second terminal, send each body with `make api-create APP=rails BODY='...'`:
 
 1. `{"title": "Buy milk", "due_date": "2026-12-01"}` → 201. Check the `Location` header.
 2. `{"title": ""}` → 422 Problem Details.
@@ -962,6 +1031,62 @@ body = response.parsed_body
 - `response.parsed_body` returns the JSON as a hash with string keys: `body["id"]`.
 - Tests to write: success (status, body, `response.location`), blank title, long title, ignored `id`/`completed`.
 - Useful assertions: `assert_difference("Todo.count", 1) { ... }`, `assert_no_difference("Todo.count") { ... }`, `assert_equal "application/problem+json", response.media_type`.
+
+<details>
+<summary>Code to type: <code>test/controllers/api/todos_controller_test.rb</code></summary>
+
+```ruby
+require "test_helper"
+
+class Api::TodosControllerTest < ActionDispatch::IntegrationTest
+  test "creates a todo and returns its location" do
+    assert_difference("Todo.count", 1) do
+      post api_todos_url, params: { title: "Buy milk", description: "2 liters", due_date: "2026-12-01" }, as: :json
+    end
+
+    assert_response :created
+    body = response.parsed_body
+    assert_equal "Buy milk", body["title"]
+    assert_equal "2026-12-01", body["due_date"]
+    assert_equal false, body["completed"]
+    assert_not_nil body["created_at"]
+    assert_equal api_todo_url(body["id"]), response.location
+  end
+
+  test "rejects a blank title with problem details" do
+    assert_no_difference("Todo.count") do
+      post api_todos_url, params: { title: "  " }, as: :json
+    end
+
+    assert_response :unprocessable_content
+    assert_equal "application/problem+json", response.media_type
+    body = response.parsed_body
+    assert_equal 422, body["status"]
+    assert_includes body["errors"]["title"], "can't be blank"
+  end
+
+  test "rejects a title over 200 characters" do
+    post api_todos_url, params: { title: "a" * 201 }, as: :json
+
+    assert_response :unprocessable_content
+    assert_not_empty response.parsed_body["errors"]["title"]
+  end
+
+  test "ignores id and completed in the request" do
+    post api_todos_url, params: { title: "x", id: 999, completed: true }, as: :json
+
+    assert_response :created
+    body = response.parsed_body
+    assert_not_equal 999, body["id"]
+    assert_equal false, body["completed"]
+  end
+end
+```
+
+</details>
+
+- `do ... end` after `assert_difference` is a block. Rails counts `Todo.count` before and after the block runs.
+- Expect: `bin/rails test` shows 10 runs, 0 failures (6 earlier tests plus 4 new ones).
 
 **Step 8: Finish.** `bin/rails test` and `bin/rubocop` green. Commit.
 
