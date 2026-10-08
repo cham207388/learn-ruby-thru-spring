@@ -54,6 +54,7 @@ Most Spring concepts have a direct Rails counterpart; the big shift is from expl
 | `@ControllerAdvice` / `ProblemDetail` | `rescue_from` in `ApplicationController` | Same idea, declared in a base class |
 | `@Service` + constructor DI | Plain Ruby object or model method | No DI container; keep logic in models until it hurts |
 | `@Transactional` | `ActiveRecord::Base.transaction do ... end` | Block-scoped instead of annotation |
+| springdoc-openapi + Swagger UI | `oas_rails` gem + RapiDoc UI | Spring reads annotations and types; `oas_rails` reads routes, models and YARD comments |
 | `@CreatedDate` / `@LastModifiedDate` + `@EnableJpaAuditing` | `t.timestamps` columns | Active Record fills `created_at` / `updated_at` by column name; no config. No built-in `created_by` |
 | JUnit + MockMvc + Testcontainers | Minitest + `ActionDispatch::IntegrationTest` + fixtures | Test DB is real Postgres; fixtures in YAML |
 | `Optional<T>`, nulls | `nil`, safe navigation `&.` | Everything is an object, including `nil` |
@@ -891,6 +892,9 @@ Both apps must return the same JSON shape. Decide it once here:
 | `controller/TodoController` | `@PostMapping`, `@Valid @RequestBody`, `ResponseEntity.created(location)` built with `ServletUriComponentsBuilder` |
 | `exception/GlobalExceptionHandler` | `@RestControllerAdvice` extending `ResponseEntityExceptionHandler`. Overrides `handleMethodArgumentNotValid` to return 422 `ProblemDetail` with `errors` keyed by snake_case field. Malformed JSON and other MVC errors also become Problem Details |
 | `TodoControllerTest` | `@SpringBootTest` + `@AutoConfigureMockMvc` + `MockMvcTester` against Testcontainers: success with `Location`, blank title, long title, ignored fields, malformed JSON |
+| `springdoc-openapi-starter-webmvc-ui` 3.1.1 | OpenAPI 3.1 JSON at `/v3/api-docs`, Swagger UI at `/swagger-ui.html`. Version 3.x targets Spring Boot 4 |
+| `config/OpenApiConfig` | API title and version. A `ModelResolver` bean with snake_case naming, because swagger-core uses its own Jackson 2 mapper and ignores `spring.jackson.property-naming-strategy` |
+| `TodoController` annotations | `@Tag`, `@Operation`, `@ApiResponse` for 201 (`TodoResponse`) and 422 (`application/problem+json`) |
 
 **Rails track**
 
@@ -1088,7 +1092,83 @@ end
 - `do ... end` after `assert_difference` is a block. Rails counts `Todo.count` before and after the block runs.
 - Expect: `bin/rails test` shows 10 runs, 0 failures (6 earlier tests plus 4 new ones).
 
-**Step 8: Finish.** `bin/rails test` and `bin/rubocop` green. Commit.
+**Step 8: Add API docs (OpenAPI).** Rails has no built-in Swagger. Use the `oas_rails` gem: it builds an OpenAPI 3.x document from your routes, models and YARD comments, and serves an interactive UI (RapiDoc). It works with Minitest. The popular `rswag` gem needs RSpec, so it does not fit this project.
+
+**8.1 Add the gem.** `bundle add` edits `Gemfile` and runs `bundle install`, like adding a dependency line in Gradle and syncing.
+
+```bash
+bundle add oas_rails
+```
+
+**8.2 Write the initializer.** `bin/rails generate oas_rails:config` writes a long sample file. Write this short version by hand instead.
+
+<details>
+<summary>Code to type: <code>config/initializers/oas_rails.rb</code></summary>
+
+```ruby
+OasRails.configure do |config|
+  config.info.title = "Todo API (Rails)"
+  config.info.version = "v1"
+  config.info.summary = "Same contract as the Spring app: snake_case JSON, RFC 9457 Problem Details"
+  config.servers = [ { url: "http://localhost:3000", description: "Local" } ]
+  config.tags = [ { name: "Todos", description: "Create and manage todos" } ]
+  config.api_path = "/api"
+  config.authenticate_all_routes_by_default = false
+  config.set_default_responses = false
+end
+```
+
+</details>
+
+- `OasRails.configure do |config| ... end` is the Rails version of an `OpenAPI` `@Bean`. The block receives a settings object.
+- `api_path = "/api"` documents only routes under `/api`, so `/up` stays out.
+- `authenticate_all_routes_by_default = false`: there is no login yet. `set_default_responses = false`: list only the responses you declare.
+
+**8.3 Mount the docs.** An engine is a mini Rails app inside yours. `mount` gives it a URL prefix.
+
+<details>
+<summary>Code to type: <code>config/routes.rb</code></summary>
+
+```ruby
+Rails.application.routes.draw do
+  get "up" => "rails/health#show", as: :rails_health_check
+
+  mount OasRails::Engine => "/docs"
+
+  namespace :api do
+    resources :todos, only: %i[create show]
+  end
+end
+```
+
+</details>
+
+**8.4 Describe `create` with YARD comments.** Put these lines directly above `def create`. They are the Rails version of `@Operation` and `@ApiResponse`.
+
+<details>
+<summary>Code to type: <code>app/controllers/api/todos_controller.rb (above def create)</code></summary>
+
+```ruby
+  # @summary Create a todo
+  # @tags Todos
+  # @request_body The todo to create [!Hash{title: String, description: String, due_date: String}]
+  # @response Created; Location header points to the new todo(201) [Todo]
+  # @response Validation failed(422) [Hash{title: String, status: Integer, detail: String, instance: String, errors: Hash}]
+```
+
+</details>
+
+- `[!Hash{...}]`: `!` marks the body as required; `Hash{key: Type}` describes the flat JSON body.
+- `[Todo]`: `oas_rails` builds the schema from the `Todo` model's columns.
+- Format is strict. A malformed tag makes `/docs.json` fail with `OasCore::YARD::TagParsingError`. Read the server log when the page breaks.
+
+**8.5 Open the docs.** Start `make rails-run`, then run `make rails-docs`. The raw document is at `http://localhost:3000/docs.json`.
+
+- Check: the `POST /api/todos` operation shows tag `Todos`, the request fields `title`, `description`, `due_date`, and responses 201 and 422.
+- Known gap: the `Todo` schema lists columns but leaves out `created_at` and `updated_at`. The real response still has them.
+- **Security:** both apps serve docs to anyone. Before a public deploy, turn them off: Spring `springdoc.api-docs.enabled: false` and `springdoc.swagger-ui.enabled: false` in the production profile; Rails `mount OasRails::Engine => "/docs" unless Rails.env.production?`.
+
+**Step 9: Finish.** `bin/rails test`, `bin/rubocop` and `bin/brakeman` green. Commit.
 
 **What to notice:** strong parameters replace the request DTO. `todo.save` returns true or false; `save!` raises. Validation runs at the controller boundary in Spring and in the model in Rails.
 
@@ -1115,6 +1195,8 @@ end
 | 7 | `make api-create APP=spring BODY='{"title":"x","id":999,"completed":true}'` | `201`, new id (not 999), `completed: false` |
 | 8 | `make api-shape` | same key list from both apps |
 | 9 | `make api-shape BODY='{"title":""}'` | same Problem Details keys from both apps |
+| 10 | `make spring-docs` | Swagger UI opens; `POST /api/todos` under `Todos`; schemas use `due_date`, `created_at` |
+| 11 | `make rails-docs` | RapiDoc opens; `POST /api/todos` under `Todos` with 201 and 422 |
 
 </details>
 

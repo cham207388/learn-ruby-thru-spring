@@ -24,9 +24,9 @@ endif
 .PHONY: help tools-check check \
 	compose-up compose-down compose-reset compose-ps compose-logs \
 	db-version db-list db-todos-spring db-todos-rails db-compare db-flyway-history psql-spring psql-rails \
-	spring-build spring-clean spring-test spring-lint spring-format spring-run spring-health spring-db \
+	spring-build spring-clean spring-test spring-lint spring-format spring-run spring-health spring-docs spring-db \
 	rails-exists rails-install rails-db-prepare rails-db-migrate rails-db-rollback rails-db-status rails-db \
-	rails-test rails-lint rails-lint-fix rails-security rails-run rails-console rails-routes rails-health rails-check \
+	rails-test rails-lint rails-lint-fix rails-security rails-run rails-console rails-routes rails-health rails-docs rails-check \
 	api-create api-list api-get api-update api-delete api-shape api-list-shape
 
 help: ## List targets
@@ -114,6 +114,9 @@ spring-run: ## Start the app on port 8081 (Ctrl-C to stop)
 spring-health: ## Call /actuator/health
 	@curl -s localhost:8081/actuator/health; echo
 
+spring-docs: ## Open Swagger UI (app must be running)
+	open http://localhost:8081/swagger-ui.html
+
 ## ---------- Rails ----------
 
 rails-exists:
@@ -149,7 +152,7 @@ rails-lint-fix: rails-exists ## RuboCop with safe autocorrect
 rails-security: rails-exists ## Brakeman and bundler-audit
 	cd $(RAILS_DIR) && bin/brakeman --no-pager -q && bin/bundler-audit
 
-rails-run: rails-exists ## Start the server on port 3000 (Ctrl-C to stop)
+rails-run: rails-exists rails-db-migrate ## Start the server on port 3000 (Ctrl-C to stop)
 	cd $(RAILS_DIR) && bin/rails server
 
 rails-console: rails-exists ## Open the Rails console
@@ -160,6 +163,9 @@ rails-routes: rails-exists ## Show the todo routes
 
 rails-health: ## Call /up
 	@curl -s -o /dev/null -w "GET /up -> %{http_code}\n" localhost:3000/up
+
+rails-docs: ## Open the oas_rails API docs (server must be running)
+	open http://localhost:3000/docs
 
 rails-check: rails-test rails-lint rails-security ## Tests, lint and security scans
 
