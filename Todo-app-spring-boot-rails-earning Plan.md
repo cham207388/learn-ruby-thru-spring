@@ -637,6 +637,26 @@ bin/rails generate migration CreateTodos title:string description:text completed
 - Keep `t.timestamps`. It adds `created_at` and `updated_at`, both `null: false`.
 - Why: Active Record validations come in US-2.2. The DB constraint is the last line of defense, same as `NOT NULL` in your Flyway SQL.
 
+<details>
+<summary>Code to type: <code>db/migrate/<timestamp>_create_todos.rb</code></summary>
+
+```ruby
+class CreateTodos < ActiveRecord::Migration[8.1]
+  def change
+    create_table :todos do |t|
+      t.string :title, null: false, limit: 200
+      t.text :description
+      t.boolean :completed, null: false, default: false
+      t.date :due_date
+
+      t.timestamps
+    end
+  end
+end
+```
+
+</details>
+
 **Step 4: Run the migration.**
 
 ```bash
@@ -779,6 +799,19 @@ Todo.new(title: "a" * 201).valid?
 - `save` returns true or false. `save!` raises. You will use both in Phase 3.
 - Why: validation lives on the model and runs on every save. Spring validates at the controller boundary with `@Valid`.
 
+<details>
+<summary>Code to type: <code>app/models/todo.rb</code></summary>
+
+```ruby
+# frozen_string_literal: true
+
+class Todo < ApplicationRecord
+  validates :title, presence: true, length: { maximum: 200 }
+end
+```
+
+</details>
+
 **Step 4: Write fixtures.** Create `test/fixtures/todos.yml` with two records:
 
 - `buy_milk`: title only.
@@ -786,6 +819,22 @@ Todo.new(title: "a" * 201).valid?
 - Format: top-level key is the fixture name; nested keys are column values.
 - Why: Rails loads every fixture into the test DB before each test and rolls back after it. Like `@Sql` scripts plus a `@Transactional` test. `id`, `created_at` and `updated_at` fill in automatically.
 - Access a fixture in a test with `todos(:buy_milk)`.
+
+<details>
+<summary>Code to type: <code>test/fixtures/todos.yml</code></summary>
+
+```yaml
+buy_milk:
+  title: Buy milk
+
+file_taxes:
+  title: File taxes
+  description: Federal and state returns
+  completed: true
+  due_date: 2026-04-15
+```
+
+</details>
 
 **Step 5: Write the model test.** Create `test/models/todo_test.rb`, class `TodoTest < ActiveSupport::TestCase`. Write these tests:
 
@@ -800,6 +849,50 @@ Todo.new(title: "a" * 201).valid?
 bin/rails test test/models/todo_test.rb
 bin/rails test
 ```
+
+<details>
+<summary>Code to type: <code>test/models/todo_test.rb</code></summary>
+
+```ruby
+require "test_helper"
+
+class TodoTest < ActiveSupport::TestCase
+  test "saves with a valid title and completed defaults to false" do
+    todo = Todo.new(title: "Write tests")
+
+    assert todo.save
+    assert_not todo.completed
+    assert_not_nil todo.created_at
+  end
+
+  test "is invalid with a blank title" do
+    todo = Todo.new(title: "  ")
+
+    assert_not todo.valid?
+    assert_includes todo.errors[:title], "can't be blank"
+  end
+
+  test "is invalid with a title over 200 characters" do
+    todo = Todo.new(title: "a" * 201)
+
+    assert_not todo.valid?
+    assert_includes todo.errors[:title], "is too long (maximum is 200 characters)"
+  end
+
+  test "accepts a title of exactly 200 characters" do
+    assert Todo.new(title: "a" * 200).valid?
+  end
+
+  test "fixture buy_milk loads with its title" do
+    todo = todos(:buy_milk)
+
+    assert_equal "Buy milk", todo.title
+    assert_not todo.completed
+  end
+end
+```
+
+</details>
 
 **Checklist**
 
@@ -1234,6 +1327,23 @@ end
 
 **Step 1: Add the `index` route.** Change `only:` to `%i[index show create]`. Run `bin/rails routes -g todos` to check.
 
+<details>
+<summary>Code to type: <code>config/routes.rb</code></summary>
+
+```ruby
+Rails.application.routes.draw do
+  get "up" => "rails/health#show", as: :rails_health_check
+
+  mount OasRails::Engine => "/docs"
+
+  namespace :api do
+    resources :todos, only: %i[index show create]
+  end
+end
+```
+
+</details>
+
 **Step 2: Handle not-found once.** In `ApplicationController`, add:
 
 ```ruby
@@ -1243,6 +1353,37 @@ rescue_from ActiveRecord::RecordNotFound, with: :not_found
 Then write a private `not_found(error)` method that calls `render_problem` with `:not_found` and `error.message`.
 
 - Why: `Todo.find` raises `RecordNotFound` for an unknown id. `rescue_from` catches it for every controller. Like `@ExceptionHandler` in `@RestControllerAdvice`.
+
+<details>
+<summary>Code to type: <code>app/controllers/application_controller.rb</code> (full file)</summary>
+
+```ruby
+class ApplicationController < ActionController::API
+  rescue_from ActiveRecord::RecordNotFound, with: :not_found
+
+  private
+
+  # Renders an RFC 9457 Problem Details response, same shape as Spring's ProblemDetail
+  def render_problem(status:, detail:, errors: nil)
+    code = Rack::Utils.status_code(status)
+    body = {
+      title: Rack::Utils::HTTP_STATUS_CODES[code],
+      status: code,
+      detail: detail,
+      instance: request.path
+    }
+    body[:errors] = errors if errors
+    render json: body, status: code, content_type: "application/problem+json"
+  end
+
+  # Any controller that calls find with an unknown id ends up here
+  def not_found(error)
+    render_problem(status: :not_found, detail: error.message)
+  end
+end
+```
+
+</details>
 
 **Step 3: Write `show`.** One line: render `Todo.find(params[:id])` as JSON.
 
@@ -1267,6 +1408,21 @@ Todo.by_completed(true).to_a
 - `to_sql` shows the SQL without running it. Scopes are lazy: SQL runs only on `to_a`, `each` or `render`. Like a JPA `Specification`, without the boilerplate.
 - Why `by_completed`, not `completed`: `todo.completed` is already the column reader. Same name on the class reads as the same thing.
 
+<details>
+<summary>Code to type: <code>app/models/todo.rb</code> (full file)</summary>
+
+```ruby
+# frozen_string_literal: true
+
+class Todo < ApplicationRecord
+  validates :title, presence: true, length: { maximum: 200 }
+
+  scope :by_completed, ->(value) { where(completed: value) }
+end
+```
+
+</details>
+
 **Step 5: Write `index`.** Build it in four parts:
 
 1. **Parse the filter.** Query params are always strings. Convert with `ActiveModel::Type::Boolean.new.cast(params[:completed])`: `"true"` gives `true`, `"false"` gives `false`, missing gives `nil`. Spring's `@RequestParam Boolean` did this for you.
@@ -1276,6 +1432,74 @@ Todo.by_completed(true).to_a
 
 - Check the server log: two queries, `SELECT COUNT(*)` then `SELECT ... LIMIT ... OFFSET`. Spring Data's `Page` runs the same two queries.
 
+<details>
+<summary>Code to type: <code>app/controllers/api/todos_controller.rb</code> (full file, with show, index and their YARD docs)</summary>
+
+```ruby
+class Api::TodosController < ApplicationController
+  DEFAULT_SIZE = 20
+  MAX_SIZE = 100
+
+  # @summary List todos, newest first
+  # @tags Todos
+  # @parameter completed(query) [Boolean] Filter by completion; omit for all
+  # @parameter page(query) [Integer] 1-based page number
+  # @parameter size(query) [Integer] Page size, 1 to 100
+  # @response Page of todos(200) [Hash{items: Array<Todo>, page: Integer, size: Integer, total: Integer}]
+  def index
+    completed = ActiveModel::Type::Boolean.new.cast(params[:completed])
+    todos = Todo.order(created_at: :desc, id: :desc)
+    todos = todos.by_completed(completed) unless completed.nil?
+
+    page = [ params.fetch(:page, 1).to_i, 1 ].max
+    size = params.fetch(:size, DEFAULT_SIZE).to_i.clamp(1, MAX_SIZE)
+
+    render json: {
+      items: todos.limit(size).offset((page - 1) * size),
+      page:,
+      size:,
+      total: todos.count
+    }
+  end
+
+  # @summary Get one todo
+  # @tags Todos
+  # @response The todo(200) [Todo]
+  # @response No todo with this id(404) [Hash{title: String, status: Integer, detail: String, instance: String}]
+  def show
+    render json: Todo.find(params[:id])
+  end
+
+  # @summary Create a todo
+  # @tags Todos
+  # @request_body The todo to create [!Hash{title: String, description: String, due_date: String}]
+  # @response Created; Location header points to the new todo(201) [Todo]
+  # @response Validation failed(422) [Hash{title: String, status: Integer, detail: String, instance: String, errors: Hash}]
+  def create
+    todo = Todo.new(create_params)
+
+    if todo.save
+      render json: todo, status: :created, location: api_todo_url(todo)
+    else
+      render_problem(status: :unprocessable_content, detail: "Validation failed", errors: todo.errors.to_hash)
+    end
+  end
+
+  private
+
+  def create_params
+    params.expect(todo: [ :title, :description, :due_date ])
+  end
+end
+```
+
+</details>
+
+- `DEFAULT_SIZE` / `MAX_SIZE` are constants: capitalized names, like `static final` fields.
+- `[ x, 1 ].max` picks the larger value: `Math.max(x, 1)`.
+- `todos.count` runs `SELECT COUNT(*)` on the filtered query, before `limit` and `offset`.
+- The YARD `@parameter name(query) [Type]` lines document query parameters, like `@Parameter` in `TodoApi`.
+
 **Step 6: Write request tests.**
 
 - List is newest first. Set fixture times with ERB, e.g. `created_at: <%= 2.days.ago %>`.
@@ -1283,6 +1507,89 @@ Todo.by_completed(true).to_a
 - `?page=2&size=1` returns the second item; `total` is correct.
 - `?size=500` returns `size: 100`.
 - `show` returns 200 with the right title; unknown id returns 404 with media type `application/problem+json`.
+
+<details>
+<summary>Code to type: <code>test/fixtures/todos.yml</code> (full file: adds fixed creation times)</summary>
+
+```yaml
+buy_milk:
+  title: Buy milk
+  created_at: <%= 2.days.ago %>
+  updated_at: <%= 2.days.ago %>
+
+file_taxes:
+  title: File taxes
+  description: Federal and state returns
+  completed: true
+  due_date: 2026-04-15
+  created_at: <%= 1.day.ago %>
+  updated_at: <%= 1.day.ago %>
+```
+
+</details>
+
+- `<%= 2.days.ago %>` is ERB inside YAML, the same tag as in `database.yml`. It gives each fixture a fixed age, so "newest first" has a known order.
+
+<details>
+<summary>Code to type: <code>test/controllers/api/todos_controller_test.rb</code> (add inside the class, after the US-3.1 tests)</summary>
+
+```ruby
+  test "lists todos newest first with page metadata" do
+    get api_todos_url
+
+    assert_response :ok
+    body = response.parsed_body
+    assert_equal [ "File taxes", "Buy milk" ], body["items"].map { |todo| todo["title"] }
+    assert_equal 1, body["page"]
+    assert_equal 20, body["size"]
+    assert_equal 2, body["total"]
+  end
+
+  test "filters by completed" do
+    get api_todos_url, params: { completed: "true" }
+    assert_equal [ "File taxes" ], response.parsed_body["items"].map { |todo| todo["title"] }
+
+    get api_todos_url, params: { completed: "false" }
+    assert_equal [ "Buy milk" ], response.parsed_body["items"].map { |todo| todo["title"] }
+  end
+
+  test "paginates with one-based pages" do
+    get api_todos_url, params: { page: 2, size: 1 }
+
+    body = response.parsed_body
+    assert_equal [ "Buy milk" ], body["items"].map { |todo| todo["title"] }
+    assert_equal 2, body["page"]
+    assert_equal 1, body["size"]
+    assert_equal 2, body["total"]
+  end
+
+  test "clamps size to 100" do
+    get api_todos_url, params: { size: 500 }
+
+    assert_equal 100, response.parsed_body["size"]
+  end
+
+  test "shows one todo" do
+    get api_todo_url(todos(:buy_milk))
+
+    assert_response :ok
+    assert_equal "Buy milk", response.parsed_body["title"]
+  end
+
+  test "returns 404 problem details for an unknown id" do
+    get api_todo_url(id: 999_999)
+
+    assert_response :not_found
+    assert_equal "application/problem+json", response.media_type
+    assert_equal 404, response.parsed_body["status"]
+  end
+```
+
+</details>
+
+- `body["items"].map { |todo| todo["title"] }` collects the titles, like `stream().map(...).toList()`.
+- `999_999`: underscores in number literals are allowed, like Java's `999_999`.
+- Expect: `bin/rails test` shows 16 runs, 0 failures.
 
 **Step 7: Optional: try a gem.** `bundle add pagy`, replace your hand pagination, and compare. `bundle add` edits `Gemfile` and runs `bundle install`, like adding a line to `build.gradle.kts` and syncing. Revert if you prefer your version.
 
@@ -1355,6 +1662,100 @@ Write private `set_todo`: `@todo = Todo.find(params[:id])`. Change `show` to ren
 - Partial update is automatic: `update` assigns only the keys present.
 - Sending `"description": null` clears the field. Omitting `description` leaves it. Spring's nullable-field record cannot tell these two apart. Note it in `LEARNINGS.md`.
 
+Routes line after Step 1: `resources :todos, only: %i[index show create update]`.
+
+<details>
+<summary>Code to type: <code>app/controllers/api/todos_controller.rb</code> (full file after Steps 2 to 4)</summary>
+
+```ruby
+class Api::TodosController < ApplicationController
+  DEFAULT_SIZE = 20
+  MAX_SIZE = 100
+
+  before_action :set_todo, only: %i[show update]
+
+  # @summary List todos, newest first
+  # @tags Todos
+  # @parameter completed(query) [Boolean] Filter by completion; omit for all
+  # @parameter page(query) [Integer] 1-based page number
+  # @parameter size(query) [Integer] Page size, 1 to 100
+  # @response Page of todos(200) [Hash{items: Array<Todo>, page: Integer, size: Integer, total: Integer}]
+  def index
+    completed = ActiveModel::Type::Boolean.new.cast(params[:completed])
+    todos = Todo.order(created_at: :desc, id: :desc)
+    todos = todos.by_completed(completed) unless completed.nil?
+
+    page = [ params.fetch(:page, 1).to_i, 1 ].max
+    size = params.fetch(:size, DEFAULT_SIZE).to_i.clamp(1, MAX_SIZE)
+
+    render json: {
+      items: todos.limit(size).offset((page - 1) * size),
+      page:,
+      size:,
+      total: todos.count
+    }
+  end
+
+  # @summary Get one todo
+  # @tags Todos
+  # @response The todo(200) [Todo]
+  # @response No todo with this id(404) [Hash{title: String, status: Integer, detail: String, instance: String}]
+  def show
+    render json: @todo
+  end
+
+  # @summary Create a todo
+  # @tags Todos
+  # @request_body The todo to create [!Hash{title: String, description: String, due_date: String}]
+  # @response Created; Location header points to the new todo(201) [Todo]
+  # @response Validation failed(422) [Hash{title: String, status: Integer, detail: String, instance: String, errors: Hash}]
+  def create
+    todo = Todo.new(create_params)
+
+    if todo.save
+      render json: todo, status: :created, location: api_todo_url(todo)
+    else
+      render_problem(status: :unprocessable_content, detail: "Validation failed", errors: todo.errors.to_hash)
+    end
+  end
+
+  # @summary Update a todo (only the fields sent)
+  # @tags Todos
+  # @request_body Fields to change [!Hash{title: String, description: String, due_date: String, completed: Boolean}]
+  # @response The updated todo(200) [Todo]
+  # @response No todo with this id(404) [Hash{title: String, status: Integer, detail: String, instance: String}]
+  # @response Validation failed(422) [Hash{title: String, status: Integer, detail: String, instance: String, errors: Hash}]
+  def update
+    if @todo.update(update_params)
+      render json: @todo
+    else
+      render_problem(status: :unprocessable_content, detail: "Validation failed", errors: @todo.errors.to_hash)
+    end
+  end
+
+  private
+
+  # Runs before show and update; an unknown id raises RecordNotFound, handled in ApplicationController
+  def set_todo
+    @todo = Todo.find(params[:id])
+  end
+
+  def create_params
+    params.expect(todo: [ :title, :description, :due_date ])
+  end
+
+  # Update may also change completed; create may not
+  def update_params
+    params.expect(todo: [ :title, :description, :due_date, :completed ])
+  end
+end
+```
+
+</details>
+
+- `@todo` (with `@`) is an instance variable. `set_todo` assigns it; `show` and `update` read it.
+- The YARD block on `update` documents both PATCH and PUT in `/docs`.
+
 **Step 5: See change tracking in the console.**
 
 ```ruby
@@ -1376,6 +1777,64 @@ todo.save
 - Timestamps: wrap the request in `travel 1.minute do ... end`. Then `updated_at` changes and `created_at` stays. `travel` moves the test clock, like a fixed `Clock` bean.
 - 404 for unknown id; 422 for blank title.
 - Use `patch api_todo_url(todos(:buy_milk)), params: { ... }, as: :json`. Reload the record with `todo.reload` before asserting.
+
+<details>
+<summary>Code to type: <code>test/controllers/api/todos_controller_test.rb</code> (add inside the class, after the US-3.2 tests)</summary>
+
+```ruby
+  test "updates only the fields sent" do
+    todo = todos(:file_taxes)
+
+    patch api_todo_url(todo), params: { title: "File 2026 taxes" }, as: :json
+
+    assert_response :ok
+    todo.reload
+    assert_equal "File 2026 taxes", todo.title
+    assert_equal "Federal and state returns", todo.description
+  end
+
+  test "marks a todo complete" do
+    todo = todos(:buy_milk)
+
+    patch api_todo_url(todo), params: { completed: true }, as: :json
+
+    assert_response :ok
+    assert todo.reload.completed
+  end
+
+  test "changes updated_at but not created_at" do
+    todo = todos(:buy_milk)
+    created_at = todo.created_at
+    updated_at = todo.updated_at
+
+    travel 1.minute do
+      patch api_todo_url(todo), params: { title: "Buy oat milk" }, as: :json
+    end
+
+    todo.reload
+    assert_equal created_at, todo.created_at
+    assert_operator todo.updated_at, :>, updated_at
+  end
+
+  test "rejects a blank title on update" do
+    patch api_todo_url(todos(:buy_milk)), params: { title: "" }, as: :json
+
+    assert_response :unprocessable_content
+    assert_includes response.parsed_body["errors"]["title"], "can't be blank"
+  end
+
+  test "returns 404 when updating an unknown id" do
+    patch api_todo_url(id: 999_999), params: { title: "x" }, as: :json
+
+    assert_response :not_found
+  end
+```
+
+</details>
+
+- `travel 1.minute do ... end` runs the block with the clock moved forward, then restores it.
+- `assert_operator a, :>, b` asserts `a > b` and prints both values on failure.
+- Expect: `bin/rails test` shows 21 runs, 0 failures.
 
 **What to notice:** `before_action` handles cross-cutting code. Both stacks track changes: Hibernate dirty checking vs Active Record `changed?` / `saved_changes`.
 
@@ -1430,6 +1889,123 @@ todo.save
 - `head` sends a status with no body.
 - `destroy!` raises if a callback stops the delete. With no callbacks it acts like `destroy`, but failure is loud.
 
+<details>
+<summary>Code to type: <code>config/routes.rb</code></summary>
+
+```ruby
+Rails.application.routes.draw do
+  get "up" => "rails/health#show", as: :rails_health_check
+
+  mount OasRails::Engine => "/docs"
+
+  namespace :api do
+    resources :todos
+  end
+end
+```
+
+</details>
+
+<details>
+<summary>Code to type: <code>app/controllers/api/todos_controller.rb</code> (full file, final version)</summary>
+
+```ruby
+class Api::TodosController < ApplicationController
+  DEFAULT_SIZE = 20
+  MAX_SIZE = 100
+
+  before_action :set_todo, only: %i[show update destroy]
+
+  # @summary List todos, newest first
+  # @tags Todos
+  # @parameter completed(query) [Boolean] Filter by completion; omit for all
+  # @parameter page(query) [Integer] 1-based page number
+  # @parameter size(query) [Integer] Page size, 1 to 100
+  # @response Page of todos(200) [Hash{items: Array<Todo>, page: Integer, size: Integer, total: Integer}]
+  def index
+    completed = ActiveModel::Type::Boolean.new.cast(params[:completed])
+    todos = Todo.order(created_at: :desc, id: :desc)
+    todos = todos.by_completed(completed) unless completed.nil?
+
+    page = [ params.fetch(:page, 1).to_i, 1 ].max
+    size = params.fetch(:size, DEFAULT_SIZE).to_i.clamp(1, MAX_SIZE)
+
+    render json: {
+      items: todos.limit(size).offset((page - 1) * size),
+      page:,
+      size:,
+      total: todos.count
+    }
+  end
+
+  # @summary Get one todo
+  # @tags Todos
+  # @response The todo(200) [Todo]
+  # @response No todo with this id(404) [Hash{title: String, status: Integer, detail: String, instance: String}]
+  def show
+    render json: @todo
+  end
+
+  # @summary Create a todo
+  # @tags Todos
+  # @request_body The todo to create [!Hash{title: String, description: String, due_date: String}]
+  # @response Created; Location header points to the new todo(201) [Todo]
+  # @response Validation failed(422) [Hash{title: String, status: Integer, detail: String, instance: String, errors: Hash}]
+  def create
+    todo = Todo.new(create_params)
+
+    if todo.save
+      render json: todo, status: :created, location: api_todo_url(todo)
+    else
+      render_problem(status: :unprocessable_content, detail: "Validation failed", errors: todo.errors.to_hash)
+    end
+  end
+
+  # @summary Update a todo (only the fields sent)
+  # @tags Todos
+  # @request_body Fields to change [!Hash{title: String, description: String, due_date: String, completed: Boolean}]
+  # @response The updated todo(200) [Todo]
+  # @response No todo with this id(404) [Hash{title: String, status: Integer, detail: String, instance: String}]
+  # @response Validation failed(422) [Hash{title: String, status: Integer, detail: String, instance: String, errors: Hash}]
+  def update
+    if @todo.update(update_params)
+      render json: @todo
+    else
+      render_problem(status: :unprocessable_content, detail: "Validation failed", errors: @todo.errors.to_hash)
+    end
+  end
+
+  # @summary Delete a todo
+  # @tags Todos
+  # @response Deleted, no body(204) [Hash{}]
+  # @response No todo with this id(404) [Hash{title: String, status: Integer, detail: String, instance: String}]
+  def destroy
+    @todo.destroy!
+    head :no_content
+  end
+
+  private
+
+  # Runs before show, update and destroy; an unknown id raises RecordNotFound, handled in ApplicationController
+  def set_todo
+    @todo = Todo.find(params[:id])
+  end
+
+  def create_params
+    params.expect(todo: [ :title, :description, :due_date ])
+  end
+
+  # Update may also change completed; create may not
+  def update_params
+    params.expect(todo: [ :title, :description, :due_date, :completed ])
+  end
+end
+```
+
+</details>
+
+- `[Hash{}]` on the 204 response documents an empty body.
+
 **Step 4: Compare `destroy` and `delete` in the console.** Watch the SQL:
 
 ```ruby
@@ -1445,6 +2021,36 @@ Todo.where(title: "b").delete_all
 - Delete returns 204 and an empty body; `assert_difference("Todo.count", -1)`.
 - A later `GET` of the same id returns 404.
 - Unknown id returns 404.
+
+<details>
+<summary>Code to type: <code>test/controllers/api/todos_controller_test.rb</code> (add inside the class, after the US-3.3 tests)</summary>
+
+```ruby
+  test "deletes a todo" do
+    todo = todos(:buy_milk)
+
+    assert_difference("Todo.count", -1) do
+      delete api_todo_url(todo)
+    end
+
+    assert_response :no_content
+    assert_empty response.body
+
+    get api_todo_url(todo)
+    assert_response :not_found
+  end
+
+  test "returns 404 when deleting an unknown id" do
+    delete api_todo_url(id: 999_999)
+
+    assert_response :not_found
+  end
+```
+
+</details>
+
+- `assert_empty response.body` checks that 204 sends no body.
+- Expect: `bin/rails test` shows 23 runs, 0 failures.
 
 **What to notice:** `resources :todos` now replaces five mapping annotations. Read the `bin/rails routes` table it generated.
 
