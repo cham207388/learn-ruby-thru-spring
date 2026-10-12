@@ -1,14 +1,14 @@
-package com.example.todo.controller;
+package com.example.todo.todos.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.example.todo.TestcontainersConfiguration;
-import com.example.todo.entity.Todo;
-import com.example.todo.repository.TodoRepository;
+import com.example.todo.todos.entity.Todo;
+import com.example.todo.todos.repository.TodoRepository;
 import java.util.List;
+import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
@@ -20,21 +20,21 @@ import org.springframework.test.web.servlet.assertj.MvcTestResult;
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
+@RequiredArgsConstructor
 class TodoControllerTest {
 
-    @Autowired
-    private MockMvcTester mvc;
+    private final MockMvcTester mockMvcTester;
 
-    @Autowired
-    private TodoRepository repository;
+    private final TodoRepository todoRepository;
 
     @BeforeEach
     void cleanTable() {
-        repository.deleteAll();
+        todoRepository.deleteAll();
     }
 
     private MvcTestResult postTodo(String json) {
-        return mvc.post()
+        return mockMvcTester
+                .post()
                 .uri("/api/todos")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json)
@@ -54,7 +54,7 @@ class TodoControllerTest {
         assertThat(result).bodyJson().extractingPath("$.created_at").isNotNull();
         assertThat(result).bodyJson().extractingPath("$.updated_at").isNotNull();
 
-        Long id = repository.findAll().getFirst().getId();
+        Long id = todoRepository.findAll().getFirst().getId();
         assertThat(result.getResponse().getHeader("Location")).endsWith("/api/todos/" + id);
     }
 
@@ -68,7 +68,7 @@ class TodoControllerTest {
         assertThat(result).hasContentType(MediaType.APPLICATION_PROBLEM_JSON);
         assertThat(result).bodyJson().extractingPath("$.status").isEqualTo(422);
         assertThat(result).bodyJson().extractingPath("$.errors.title").asArray().isNotEmpty();
-        assertThat(repository.count()).isZero();
+        assertThat(todoRepository.count()).isZero();
     }
 
     @Test
@@ -103,7 +103,7 @@ class TodoControllerTest {
     private Todo saveTodo(String title, boolean completed) {
         Todo todo = new Todo(title);
         todo.setCompleted(completed);
-        return repository.saveAndFlush(todo);
+        return todoRepository.saveAndFlush(todo);
     }
 
     @Test
@@ -112,7 +112,7 @@ class TodoControllerTest {
         saveTodo("second", true);
         saveTodo("third", false);
 
-        MvcTestResult result = mvc.get().uri("/api/todos").exchange();
+        MvcTestResult result = mockMvcTester.get().uri("/api/todos").exchange();
 
         assertThat(result).hasStatus(HttpStatus.OK);
         assertThat(result).bodyJson().extractingPath("$.items[*].title").isEqualTo(List.of("third", "second", "first"));
@@ -126,11 +126,11 @@ class TodoControllerTest {
         saveTodo("open", false);
         saveTodo("done", true);
 
-        assertThat(mvc.get().uri("/api/todos?completed=true").exchange())
+        assertThat(mockMvcTester.get().uri("/api/todos?completed=true").exchange())
                 .bodyJson()
                 .extractingPath("$.items[*].title")
                 .isEqualTo(List.of("done"));
-        assertThat(mvc.get().uri("/api/todos?completed=false").exchange())
+        assertThat(mockMvcTester.get().uri("/api/todos?completed=false").exchange())
                 .bodyJson()
                 .extractingPath("$.items[*].title")
                 .isEqualTo(List.of("open"));
@@ -142,7 +142,8 @@ class TodoControllerTest {
         saveTodo("second", false);
         saveTodo("third", false);
 
-        MvcTestResult result = mvc.get().uri("/api/todos?page=2&size=1").exchange();
+        MvcTestResult result =
+                mockMvcTester.get().uri("/api/todos?page=2&size=1").exchange();
 
         assertThat(result).bodyJson().extractingPath("$.items[*].title").isEqualTo(List.of("second"));
         assertThat(result).bodyJson().extractingPath("$.page").isEqualTo(2);
@@ -152,17 +153,26 @@ class TodoControllerTest {
 
     @Test
     void clampsSizeTo100() {
-        assertThat(mvc.get().uri("/api/todos?size=500").exchange())
+        assertThat(mockMvcTester.get().uri("/api/todos?size=500").exchange())
                 .bodyJson()
                 .extractingPath("$.size")
                 .isEqualTo(100);
     }
 
     @Test
+    void fallsBackToDefaultSizeForInvalidSize() {
+        assertThat(mockMvcTester.get().uri("/api/todos?size=0").exchange())
+                .bodyJson()
+                .extractingPath("$.size")
+                .isEqualTo(20);
+    }
+
+    @Test
     void getsOneTodo() {
         Todo todo = saveTodo("Buy milk", false);
 
-        MvcTestResult result = mvc.get().uri("/api/todos/{id}", todo.getId()).exchange();
+        MvcTestResult result =
+                mockMvcTester.get().uri("/api/todos/{id}", todo.getId()).exchange();
 
         assertThat(result).hasStatus(HttpStatus.OK);
         assertThat(result).bodyJson().extractingPath("$.title").isEqualTo("Buy milk");
@@ -170,7 +180,7 @@ class TodoControllerTest {
 
     @Test
     void unknownIdReturns404ProblemDetails() {
-        MvcTestResult result = mvc.get().uri("/api/todos/999999").exchange();
+        MvcTestResult result = mockMvcTester.get().uri("/api/todos/999999").exchange();
 
         assertThat(result).hasStatus(HttpStatus.NOT_FOUND);
         assertThat(result).hasContentType(MediaType.APPLICATION_PROBLEM_JSON);

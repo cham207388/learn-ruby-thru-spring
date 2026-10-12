@@ -44,7 +44,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return errors;
     }
 
-    // dueDate -> due_date, same rule as the SNAKE_CASE naming strategy in application.yaml
+    // dueDate -> due_date, same rule as the SNAKE_CASE naming strategy in application.yaml.
+    // Jackson 3 made NamingBase.translate() protected, so the strategy cannot be reused here.
     private static String snakeCase(String field) {
         return field.replaceAll("([a-z0-9])([A-Z])", "$1_$2").toLowerCase();
     }

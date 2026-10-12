@@ -38,6 +38,7 @@ dependencies {
     testImplementation(libs.spring.boot.testcontainers)
     testImplementation(libs.testcontainers.junit.jupiter)
     testImplementation(libs.testcontainers.postgresql)
+    testImplementation(libs.archunit.junit6)
     testRuntimeOnly(libs.junit.platform.launcher)
     testCompileOnly(libs.lombok)
     testAnnotationProcessor(libs.lombok)
@@ -47,6 +48,7 @@ spotless {
     java {
         palantirJavaFormat(libs.versions.palantir.java.format.get())
         removeUnusedImports()
+        forbidWildcardImports()
         trimTrailingWhitespace()
         endWithNewline()
     }
@@ -57,6 +59,10 @@ spotless {
     }
 }
 
-tasks.withType<Test> {
+tasks.withType<JavaCompile>().configureEach {
+    options.compilerArgs.addAll(listOf("-Xlint:all,-processing,-serial", "-Werror"))
+}
+
+tasks.withType<Test>().configureEach {
     useJUnitPlatform()
 }

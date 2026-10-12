@@ -1,9 +1,10 @@
 [versions]
 spring-boot = "4.1.1"
 spring-dependency-management = "1.1.7"
-spotless = "8.10.3"
+spotless = "8.10.4"
 palantir-java-format = "2.102.0"
 springdoc = "3.1.1"
+archunit = "1.5.1"
 
 # Library versions are managed by the Spring Boot BOM, so they are omitted here.
 [libraries]
@@ -25,6 +26,7 @@ spring-boot-testcontainers = { module = "org.springframework.boot:spring-boot-te
 testcontainers-junit-jupiter = { module = "org.testcontainers:testcontainers-junit-jupiter" }
 testcontainers-postgresql = { module = "org.testcontainers:testcontainers-postgresql" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+archunit-junit6 = { module = "com.tngtech.archunit:archunit-junit6", version.ref = "archunit" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }

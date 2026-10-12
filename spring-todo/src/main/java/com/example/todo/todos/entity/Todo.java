@@ -1,4 +1,4 @@
-package com.example.todo.entity;
+package com.example.todo.todos.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -7,8 +7,6 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.time.LocalDate;
 import lombok.AccessLevel;
@@ -32,8 +30,7 @@ public class Todo {
     @Setter(AccessLevel.NONE)
     private Long id;
 
-    @NotBlank
-    @Size(max = 200)
+    // Validated once, on CreateTodoRequest; the column constraint is the database's last guard
     @Column(nullable = false, length = 200)
     private String title;
 

@@ -1,6 +1,6 @@
-package com.example.todo.dto;
+package com.example.todo.todos.dto;
 
-import com.example.todo.entity.Todo;
+import com.example.todo.todos.entity.Todo;
 import java.time.Instant;
 import java.time.LocalDate;
 
