@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.jspecify.annotations.NonNull;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -23,7 +24,10 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @Override
     protected ResponseEntity<Object> handleMethodArgumentNotValid(
-            MethodArgumentNotValidException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+            @NonNull MethodArgumentNotValidException ex,
+            @NonNull HttpHeaders headers,
+            @NonNull HttpStatusCode status,
+            @NonNull WebRequest request) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, "Validation failed");
         problem.setProperty("errors", fieldErrors(ex));
         return handleExceptionInternal(ex, problem, headers, HttpStatus.UNPROCESSABLE_CONTENT, request);
@@ -38,7 +42,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     private static Map<String, List<String>> fieldErrors(MethodArgumentNotValidException ex) {
         Map<String, List<String>> errors = new LinkedHashMap<>();
         for (FieldError error : ex.getBindingResult().getFieldErrors()) {
-            errors.computeIfAbsent(snakeCase(error.getField()), key -> new ArrayList<>())
+            errors.computeIfAbsent(snakeCase(error.getField()), _ -> new ArrayList<>())
                     .add(error.getDefaultMessage());
         }
         return errors;
