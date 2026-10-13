@@ -5,7 +5,7 @@
 
 Build the same Todo REST API a third time, now in C# on ASP.NET Core, story by story. The Spring and Rails apps in this repo are the reference: same endpoints, same JSON contract, same Postgres container. Each step maps a .NET idea to the Spring idea you already own.
 
-**How we work:** one step at a time. Each step says what to do, why, and how to check it. You type the code yourself; every code block was tested on .NET SDK 10.0.402 before it went into this plan. Run commands from `dotnet-todo/` unless a step says repo root.
+**How we work:** one step at a time. Each step says what to do, why, and how to check it. You type the code yourself; every code block was tested on .NET SDK 10.0.402 before it went into this plan. Every step and every **Validate** table starts with a **Run in:** line naming the folder: repo root (`learn-ruby-thru-spring/`) or `dotnet-todo/`. Paths in "Code to type" headers are relative to repo root.
 
 **Status:** Phase 1 (install .NET and create the app) is written out in full. Later phases are outlines; each gets full, tested steps when we reach it.
 
@@ -94,6 +94,8 @@ Phase 1 ends when .NET 10 is installed through mise, `dotnet-todo/` builds with 
 <details>
 <summary><span style="font-weight: bold; color: #9999FF;"><b>Step 1: Add the database to the init script.</b></span></summary>
 
+**Run in:** repo root (`learn-ruby-thru-spring/`). Edit `db/init/01-create-databases.sql`.
+
 Add one line to `db/init/01-create-databases.sql`:
 
 <details>
@@ -118,7 +120,7 @@ CREATE DATABASE todo_dotnet;
 <details>
 <summary><span style="font-weight: bold; color: #9999FF;"><b>Step 2: Create it in the running container.</b></span></summary>
 
-From repo root:
+**Run in:** repo root (`learn-ruby-thru-spring/`).
 
 ```bash
 make compose-up
@@ -134,7 +136,7 @@ make db-list
 <details>
 <summary><span style="font-weight: bold; color: pink;"><b>Validate</b></span></summary>
 
-Run from repo root.
+**Run in:** repo root (`learn-ruby-thru-spring/`).
 
 | # | Command | Expect |
 | --- | --- | --- |
@@ -157,6 +159,8 @@ Run from repo root.
 <details>
 <summary><span style="font-weight: bold; color: #9999FF;"><b>Step 1: Update mise.</b></span></summary>
 
+**Run in:** repo root (`learn-ruby-thru-spring/`).
+
 ```bash
 mise self-update
 mise --version
@@ -171,7 +175,7 @@ mise --version
 <details>
 <summary><span style="font-weight: bold; color: #9999FF;"><b>Step 2: Install the SDK for this repo.</b></span></summary>
 
-From repo root:
+**Run in:** repo root (`learn-ruby-thru-spring/`). `mise use` writes to the `mise.toml` of the folder you are in.
 
 ```bash
 mise ls-remote dotnet 10.0
@@ -189,6 +193,8 @@ cat mise.toml
 
 <details>
 <summary><span style="font-weight: bold; color: #9999FF;"><b>Step 3: Turn off telemetry and the banner.</b></span></summary>
+
+**Run in:** repo root (`learn-ruby-thru-spring/`). Edit `mise.toml` there.
 
 Edit `mise.toml`:
 
@@ -218,7 +224,7 @@ DOTNET_NOLOGO = "1"
 <details>
 <summary><span style="font-weight: bold; color: #9999FF;"><b>Step 4: Check the install.</b></span></summary>
 
-Open a new terminal in the repo, then:
+**Run in:** repo root (`learn-ruby-thru-spring/`), in a new terminal.
 
 ```bash
 dotnet --version
@@ -239,6 +245,8 @@ echo $DOTNET_ROOT
 <details>
 <summary><span style="font-weight: bold; color: #9999FF;"><b>Step 5: Install the xUnit v3 templates.</b></span></summary>
 
+**Run in:** repo root (`learn-ruby-thru-spring/`).
+
 ```bash
 dotnet new install xunit.v3.templates
 dotnet new list xunit
@@ -246,7 +254,8 @@ dotnet new list xunit
 
 - Expect: `xUnit.net v3 Test Project` with short name `xunit3`.
 - Why: the SDK's built-in `xunit` template is still xUnit v2. v3 is the current major and runs on Microsoft.Testing.Platform.
-- Templates are NuGet packages. `dotnet new install` is per user, like adding an initializr starter.
+- Templates are NuGet packages. `dotnet new install` is per user, like adding an initializr starter. It writes to your home folder (`~/.templateengine`), not the repo, so nothing here is committed.
+- Why inside the repo: `dotnet` is on PATH only there, because `mise use` (without `-g`) pinned it in the repo's `mise.toml`. In another folder you would get `command not found`.
 
 </details>
 
@@ -254,6 +263,8 @@ dotnet new list xunit
 
 <details>
 <summary><span style="font-weight: bold; color: #9999FF;"><b>Step 6: Learn the CLI map.</b></span></summary>
+
+**Run in:** repo root (`learn-ruby-thru-spring/`).
 
 ```bash
 dotnet --help
@@ -280,19 +291,24 @@ dotnet new list web
 <details>
 <summary><span style="font-weight: bold; color:rgb(153, 184, 255);"><b>Step 7: C# drill (20 minutes).</b></span></summary>
 
-.NET 10 runs a single `.cs` file with no project: `dotnet run drill.cs`. Use it like `irb` or `jshell`. Create `playground/drill.cs`, add one block at a time, run it, and predict the output first.
+**Run in:** repo root (`learn-ruby-thru-spring/`). The file is `playground/drill.cs`.
 
-| # | Topic | Expect | Java analogue / lesson |
-| --- | --- | --- | --- |
-| 1 | `var count = 5;` then `count.GetType()` | `System.Int32 False` | `var` like Java 10; `int` is an alias for `System.Int32` |
-| 2 | `$"Hi {name.ToUpperInvariant()}"` and a raw string `"""{"title": "x"}"""` | `Hi TODO \| {"title": "x"}` | `$` interpolates; `"""` is a text block |
-| 3 | `string? description = null;` then `?.`, `??` | ` \| none \| 0` | `string?` is a nullable reference; the compiler warns when you dereference it |
-| 4 | `record TodoItem(...)` and `a with { Completed = true }` | `True \| TodoItem { Title = Buy milk, Completed = True }` | Like a Java record, plus `with` for copies |
-| 5 | `numbers.Where(...).Select(...).ToList()` | `[20, 40]` | LINQ is Streams; on EF Core it becomes SQL |
-| 6 | `size switch { null => ..., < 1 => ..., > 100 => ..., _ => ... }` | `default too small capped ok` | Switch expression with relational patterns; Java 21 pattern switch |
-| 7 | `Dictionary.TryGetValue("due_date", out var due)` | `False True` | The indexer throws on a missing key; `TryGetValue` does not |
-| 8 | `await CountAsync()` | `42` | `async`/`await` on `Task<T>`; top-level `await` works in a file app |
-| 9 | `extension(string text) { public bool IsBlank => ... }` | `True False` | C# 14 extension members: add a property to `string` |
+.NET 10 runs a single `.cs` file with no project: `dotnet run drill.cs`. Create `playground/drill.cs` and build it up one block at a time from the full file below. Before each run, predict the output.
+
+- **Not a REPL.** Unlike `irb`, a bare `count.GetType();` prints nothing: it compiles and runs, but the value is thrown away. To see a value, pass it to `Console.WriteLine(...)`. Each block ends with one `Console.WriteLine` that prints one line, starting with the block number.
+- **Where code goes.** Blocks 1-9 are top-level statements: add each one below the previous block. Blocks 4, 8 and 9 also need a declaration (`record`, method, `class`) at the **bottom** of the file, after all statements. Type declarations must come after the statements, or the compiler stops with `CS8803`.
+
+| # | Expressions printed → value | Full output line | Java analogue / lesson | Also add at the bottom |
+| --- | --- | --- | --- | --- |
+| 1 | `count.GetType()` → `System.Int32`; `count % 2 == 0` → `False` | `1: System.Int32 False` | `var` works like Java 10. `int` is an alias for `System.Int32`. `False` because 5 is odd. Booleans print as `True`/`False` | none |
+| 2 | `name.ToUpperInvariant()` → `TODO`; raw string `"""{"title": "x"}"""` → `{"title": "x"}` | `2: Hi TODO \| {"title": "x"}` | `$"..."` interpolates `{...}`. `"""` is a raw string: quotes inside need no escaping, like a Java text block | none |
+| 3 | `description?.Length` → null (prints nothing); `description ?? "none"` → `none`; `description?.Length ?? 0` → `0` | `3:  \| none \| 0` (two spaces after `3:`) | `string?` marks a nullable reference. `?.` returns null instead of throwing; `??` supplies a fallback. `Optional.map(...).orElse(...)` in two operators | none |
+| 4 | `a == new TodoItem("Buy milk", false)` → `True`; `b` → its generated `ToString()` | `4: True \| TodoItem { Title = Buy milk, Completed = True }` | A record compares by value, like a Java record. `a with { Completed = true }` copies `a` and changes one property | `record TodoItem(...)` |
+| 5 | `tens` (evens times 10) → `20, 40` | `5: [20, 40]` | LINQ `Where`/`Select`/`ToList` = `stream().filter().map().toList()`. On EF Core the same calls become SQL | none |
+| 6 | `Label(null)`, `Label(0)`, `Label(500)`, `Label(20)` → `default`, `too small`, `capped`, `ok` | `6: default too small capped ok` | Switch expression with `null`, relational (`< 1`, `> 100`) and discard (`_`) patterns. Java 21 pattern `switch`. `Label` is a local function, so it stays with block 6 | none |
+| 7 | `todo.TryGetValue("due_date", out var due)` → `False`; `due is null` → `True` | `7: False True` | `todo["due_date"]` would throw `KeyNotFoundException`. `TryGetValue` returns `false` and sets `due` to null. `out var` declares the variable inline | none |
+| 8 | `total` (awaited result) → `42` | `8: 42` | `async`/`await` on `Task<int>` = `CompletableFuture<Integer>` without callbacks. `await` works at top level in a file app | `static async Task<int> CountAsync()` |
+| 9 | `"  ".IsBlank` → `True`; `"x".IsBlank` → `False` | `9: True False` | C# 14 extension members add a property to `string` without subclassing. Java has no equivalent | `static class StringExtensions` |
 
 <details>
 <summary>Code to type: <code>playground/drill.cs</code> (full file)</summary>
@@ -364,8 +380,8 @@ static class StringExtensions
 dotnet run playground/drill.cs
 ```
 
-- Order rule: top-level statements first, then local functions, then type declarations (`record`, `class`). The compiler wraps the statements in a generated `Main`.
-- The first run takes a few seconds: the SDK builds a hidden project and caches it.
+- The compiler wraps all top-level statements in a generated `Main`. Local functions (`Label`, `CountAsync`) can sit anywhere among them. Types (`record`, `class`) must come last.
+- The very first run can sit on `Restore (30s+)`: the SDK creates a hidden `drill.cs.csproj` and downloads its packages into `~/.nuget/packages`. Later runs take 1-2 seconds; a run after an edit recompiles in a few.
 
 Done when you can read `public sealed record CreateTodoRequest([Required, MaxLength(200)] string Title, DateOnly? DueDate);` and name every part: an immutable record type, a primary constructor, two validation attributes (Java annotations), a non-nullable string and a nullable date.
 
@@ -388,7 +404,7 @@ Done when you can read `public sealed record CreateTodoRequest([Required, MaxLen
 <details>
 <summary><span style="font-weight: bold; color: pink;"><b>Validate</b></span></summary>
 
-Run from repo root.
+**Run in:** repo root (`learn-ruby-thru-spring/`).
 
 | # | Command | Expect |
 | --- | --- | --- |
@@ -430,7 +446,7 @@ dotnet-todo/
 <details>
 <summary><span style="font-weight: bold; color: #9999FF;"><b>Step 1: Pin the SDK.</b></span></summary>
 
-From repo root:
+**Run in:** repo root (`learn-ruby-thru-spring/`). The first command creates `dotnet-todo/` and moves into it. **Stay in `dotnet-todo/` for Steps 2 to 11.**
 
 ```bash
 mkdir dotnet-todo && cd dotnet-todo
@@ -448,6 +464,8 @@ cat global.json
 
 <details>
 <summary><span style="font-weight: bold; color: #9999FF;"><b>Step 2: Create the solution and the two projects.</b></span></summary>
+
+**Run in:** `dotnet-todo/`. Check with `pwd`: it must end in `/dotnet-todo`. Run from repo root and the solution lands in the wrong folder.
 
 ```bash
 dotnet new sln -n TodoApi
@@ -469,10 +487,12 @@ cat TodoApi.slnx global.json
 <details>
 <summary><span style="font-weight: bold; color: #9999FF;"><b>Step 3: Share settings with <code>Directory.Build.props</code>.</b></span></summary>
 
+**Run in:** `dotnet-todo/`. Create the file next to `TodoApi.slnx`.
+
 Create `Directory.Build.props` in `dotnet-todo/`:
 
 <details>
-<summary>Code to type: <code>Directory.Build.props</code></summary>
+<summary>Code to type: <code>dotnet-todo/Directory.Build.props</code></summary>
 
 ```xml
 <Project>
@@ -506,10 +526,12 @@ Create `Directory.Build.props` in `dotnet-todo/`:
 <details>
 <summary><span style="font-weight: bold; color: #9999FF;"><b>Step 4: Central package versions.</b></span></summary>
 
+**Run in:** `dotnet-todo/`. All paths below are relative to it.
+
 Create `Directory.Packages.props`, then remove `TargetFramework`, `Nullable`, `ImplicitUsings` and every `Version="..."` from both `.csproj` files.
 
 <details>
-<summary>Code to type: <code>Directory.Packages.props</code></summary>
+<summary>Code to type: <code>dotnet-todo/Directory.Packages.props</code></summary>
 
 ```xml
 <Project>
@@ -528,7 +550,7 @@ Create `Directory.Packages.props`, then remove `TargetFramework`, `Nullable`, `I
 </details>
 
 <details>
-<summary>Code to type: <code>src/TodoApi/TodoApi.csproj</code></summary>
+<summary>Code to type: <code>dotnet-todo/src/TodoApi/TodoApi.csproj</code></summary>
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk.Web">
@@ -544,7 +566,7 @@ Create `Directory.Packages.props`, then remove `TargetFramework`, `Nullable`, `I
 </details>
 
 <details>
-<summary>Code to type: <code>tests/TodoApi.Tests/TodoApi.Tests.csproj</code></summary>
+<summary>Code to type: <code>dotnet-todo/tests/TodoApi.Tests/TodoApi.Tests.csproj</code></summary>
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
@@ -590,6 +612,8 @@ Create `Directory.Packages.props`, then remove `TargetFramework`, `Nullable`, `I
 <details>
 <summary><span style="font-weight: bold; color: #9999FF;"><b>Step 5: Add <code>.editorconfig</code>, <code>.gitignore</code> and the tool manifest.</b></span></summary>
 
+**Run in:** `dotnet-todo/`. All three files land next to `TodoApi.slnx`.
+
 ```bash
 dotnet new gitignore
 dotnet new tool-manifest
@@ -602,7 +626,7 @@ cat dotnet-tools.json
 - Skip `dotnet new editorconfig`: its 390 lines include settings that make `dotnet format` fail on a fresh project. Write this short one instead.
 
 <details>
-<summary>Code to type: <code>.editorconfig</code></summary>
+<summary>Code to type: <code>dotnet-todo/.editorconfig</code></summary>
 
 ```ini
 root = true
@@ -647,10 +671,12 @@ generated_code = true
 <details>
 <summary><span style="font-weight: bold; color: #9999FF;"><b>Step 6: Write <code>Program.cs</code>.</b></span></summary>
 
+**Run in:** `dotnet-todo/`. All paths below are relative to it.
+
 Replace the template's weather-forecast sample. Delete `src/TodoApi/TodoApi.http` and `tests/TodoApi.Tests/UnitTest1.cs` too.
 
 <details>
-<summary>Code to type: <code>src/TodoApi/Program.cs</code></summary>
+<summary>Code to type: <code>dotnet-todo/src/TodoApi/Program.cs</code></summary>
 
 ```csharp
 using Scalar.AspNetCore;
@@ -695,10 +721,12 @@ Read it in two halves:
 <details>
 <summary><span style="font-weight: bold; color: #9999FF;"><b>Step 7: Set the port.</b></span></summary>
 
+**Run in:** `dotnet-todo/`. All paths below are relative to it.
+
 In `src/TodoApi/Properties/launchSettings.json`, set `applicationUrl` to `http://localhost:5080`.
 
 <details>
-<summary>Code to type: <code>src/TodoApi/Properties/launchSettings.json</code></summary>
+<summary>Code to type: <code>dotnet-todo/src/TodoApi/Properties/launchSettings.json</code></summary>
 
 ```json
 {
@@ -729,8 +757,10 @@ In `src/TodoApi/Properties/launchSettings.json`, set `applicationUrl` to `http:/
 <details>
 <summary><span style="font-weight: bold; color: #9999FF;"><b>Step 8: Write a smoke test by hand.</b></span></summary>
 
+**Run in:** `dotnet-todo/`. `dotnet test` finds `TodoApi.slnx` there and runs every test project in it.
+
 <details>
-<summary>Code to type: <code>tests/TodoApi.Tests/HealthTests.cs</code></summary>
+<summary>Code to type: <code>dotnet-todo/tests/TodoApi.Tests/HealthTests.cs</code></summary>
 
 ```csharp
 using System.Net;
@@ -775,6 +805,8 @@ dotnet test
 <details>
 <summary><span style="font-weight: bold; color: #9999FF;"><b>Step 9: Build, format and audit.</b></span></summary>
 
+**Run in:** `dotnet-todo/`. Each command works on `TodoApi.slnx`.
+
 ```bash
 dotnet build
 dotnet format --verify-no-changes
@@ -792,11 +824,13 @@ dotnet package list --vulnerable --include-transitive
 <details>
 <summary><span style="font-weight: bold; color: #9999FF;"><b>Step 10: Boot the server.</b></span></summary>
 
+**Run in:** `dotnet-todo/`, terminal 1.
+
 ```bash
 dotnet run --project src/TodoApi
 ```
 
-In a second terminal:
+In a second terminal (any folder):
 
 ```bash
 curl -i localhost:5080/health
@@ -815,6 +849,8 @@ open http://localhost:5080/scalar
 
 <details>
 <summary><span style="font-weight: bold; color: #9999FF;"><b>Step 11: Walk the tree.</b></span></summary>
+
+**Run in:** `dotnet-todo/`. Paths in the table are relative to it.
 
 Open each path. Write one line per row in `LEARNINGS.md`.
 
@@ -839,7 +875,7 @@ Open each path. Write one line per row in `LEARNINGS.md`.
 <details>
 <summary><span style="font-weight: bold; color: #9999FF;"><b>Step 12: Commit.</b></span></summary>
 
-From repo root:
+**Run in:** repo root (`learn-ruby-thru-spring/`). `cd ..` from `dotnet-todo/`.
 
 ```bash
 git status
@@ -867,7 +903,7 @@ git commit -m "US-1.3 .NET skeleton"
 <details>
 <summary><span style="font-weight: bold; color: pink;"><b>Validate</b></span></summary>
 
-Run from `dotnet-todo/`.
+**Run in:** `dotnet-todo/`, except row 11 (repo root).
 
 | # | Command | Expect |
 | --- | --- | --- |
