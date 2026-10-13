@@ -3,6 +3,7 @@ package com.example.todo.todos.controller;
 import com.example.todo.todos.dto.CreateTodoRequest;
 import com.example.todo.todos.dto.PageResponse;
 import com.example.todo.todos.dto.TodoResponse;
+import com.example.todo.todos.dto.UpdateTodoRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
@@ -15,6 +16,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -72,4 +74,25 @@ public interface TodoApi {
                             schema = @Schema(implementation = ProblemDetail.class)))
     @GetMapping("/{id}")
     TodoResponse getTodo(@PathVariable Long id);
+
+    @Operation(summary = "Update a todo (only the fields sent)")
+    @ApiResponse(
+            responseCode = "200",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = TodoResponse.class)))
+    @ApiResponse(
+            responseCode = "404",
+            description = "No todo with this id",
+            content =
+                    @Content(
+                            mediaType = "application/problem+json",
+                            schema = @Schema(implementation = ProblemDetail.class)))
+    @ApiResponse(
+            responseCode = "422",
+            description = "Validation failed",
+            content =
+                    @Content(
+                            mediaType = "application/problem+json",
+                            schema = @Schema(implementation = ProblemDetail.class)))
+    @PatchMapping("/{id}")
+    TodoResponse updateTodo(@PathVariable Long id, @Valid @RequestBody UpdateTodoRequest request);
 }

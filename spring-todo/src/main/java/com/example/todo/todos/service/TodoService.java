@@ -4,6 +4,7 @@ import com.example.todo.exception.TodoNotFoundException;
 import com.example.todo.todos.dto.CreateTodoRequest;
 import com.example.todo.todos.dto.PageResponse;
 import com.example.todo.todos.dto.TodoResponse;
+import com.example.todo.todos.dto.UpdateTodoRequest;
 import com.example.todo.todos.entity.Todo;
 import com.example.todo.todos.repository.TodoRepository;
 import jakarta.validation.Valid;
@@ -34,6 +35,27 @@ public class TodoService {
         todo.setDescription(request.description());
         todo.setDueDate(request.dueDate());
         return TodoResponse.from(todoRepository.save(todo));
+    }
+
+    // Applies only the fields sent; dirty checking writes the UPDATE. The flush runs it now,
+    // so the auditing listener sets updatedAt before the response is built from the entity
+    @Transactional
+    public TodoResponse updateTodo(@NotNull Long id, @NotNull @Valid UpdateTodoRequest request) {
+        Todo todo = todoRepository.findById(id).orElseThrow(() -> new TodoNotFoundException(id));
+        if (request.title() != null) {
+            todo.setTitle(request.title());
+        }
+        if (request.description() != null) {
+            todo.setDescription(request.description());
+        }
+        if (request.dueDate() != null) {
+            todo.setDueDate(request.dueDate());
+        }
+        if (request.completed() != null) {
+            todo.setCompleted(request.completed());
+        }
+        todoRepository.flush();
+        return TodoResponse.from(todo);
     }
 
     @Transactional(readOnly = true)

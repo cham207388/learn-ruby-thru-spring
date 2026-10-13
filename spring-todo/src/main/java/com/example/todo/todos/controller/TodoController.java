@@ -3,6 +3,7 @@ package com.example.todo.todos.controller;
 import com.example.todo.todos.dto.CreateTodoRequest;
 import com.example.todo.todos.dto.PageResponse;
 import com.example.todo.todos.dto.TodoResponse;
+import com.example.todo.todos.dto.UpdateTodoRequest;
 import com.example.todo.todos.service.TodoService;
 import java.net.URI;
 import lombok.RequiredArgsConstructor;
@@ -37,5 +38,10 @@ public class TodoController implements TodoApi {
     @Override
     public TodoResponse getTodo(Long id) {
         return todoService.getTodo(id);
+    }
+
+    @Override
+    public TodoResponse updateTodo(Long id, UpdateTodoRequest request) {
+        return todoService.updateTodo(id, request);
     }
 }

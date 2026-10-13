@@ -99,4 +99,51 @@ class Api::TodosControllerTest < ActionDispatch::IntegrationTest
     assert_equal "application/problem+json", response.media_type
     assert_equal 404, response.parsed_body["status"]
   end
+
+  test "updates only the fields sent" do
+    todo = todos(:file_taxes)
+
+    patch api_todo_url(todo), params: { title: "File 2026 taxes" }, as: :json
+
+    assert_response :ok
+    todo.reload
+    assert_equal "File 2026 taxes", todo.title
+    assert_equal "Federal and state returns", todo.description
+  end
+
+  test "marks a todo complete" do
+    todo = todos(:buy_milk)
+
+    patch api_todo_url(todo), params: { completed: true }, as: :json
+
+    assert_response :ok
+    assert todo.reload.completed
+  end
+
+  test "changes updated_at but not created_at" do
+    todo = todos(:buy_milk)
+    created_at = todo.created_at
+    updated_at = todo.updated_at
+
+    travel 1.minute do
+      patch api_todo_url(todo), params: { title: "Buy oat milk" }, as: :json
+    end
+
+    todo.reload
+    assert_equal created_at, todo.created_at
+    assert_operator todo.updated_at, :>, updated_at
+  end
+
+  test "rejects a blank title on update" do
+    patch api_todo_url(todos(:buy_milk)), params: { title: "" }, as: :json
+
+    assert_response :unprocessable_content
+    assert_includes response.parsed_body["errors"]["title"], "can't be blank"
+  end
+
+  test "returns 404 when updating an unknown id" do
+    patch api_todo_url(id: 999_999), params: { title: "x" }, as: :json
+
+    assert_response :not_found
+  end
 end

@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.example.todo.TestcontainersConfiguration;
 import com.example.todo.todos.entity.Todo;
 import com.example.todo.todos.repository.TodoRepository;
+import com.jayway.jsonpath.JsonPath;
+import java.time.Instant;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.junit.jupiter.api.BeforeEach;
@@ -185,5 +187,95 @@ class TodoControllerTest {
         assertThat(result).hasStatus(HttpStatus.NOT_FOUND);
         assertThat(result).hasContentType(MediaType.APPLICATION_PROBLEM_JSON);
         assertThat(result).bodyJson().extractingPath("$.detail").isEqualTo("Todo 999999 not found");
+    }
+
+    private MvcTestResult patchTodo(Long id, String json) {
+        return mockMvcTester
+                .patch()
+                .uri("/api/todos/{id}", id)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json)
+                .exchange();
+    }
+
+    @Test
+    void updatesOnlyTheFieldsSent() {
+        Todo todo = new Todo("File taxes");
+        todo.setDescription("Federal and state returns");
+        Todo saved = todoRepository.saveAndFlush(todo);
+
+        MvcTestResult result = patchTodo(saved.getId(), """
+                {"title": "File 2026 taxes"}
+                """);
+
+        assertThat(result).hasStatus(HttpStatus.OK);
+        assertThat(result).bodyJson().extractingPath("$.title").isEqualTo("File 2026 taxes");
+        assertThat(result).bodyJson().extractingPath("$.description").isEqualTo("Federal and state returns");
+        assertThat(todoRepository.findById(saved.getId()))
+                .hasValueSatisfying(updated -> assertThat(updated.getTitle()).isEqualTo("File 2026 taxes"));
+    }
+
+    @Test
+    void marksATodoComplete() {
+        Todo saved = saveTodo("Buy milk", false);
+
+        MvcTestResult result = patchTodo(saved.getId(), """
+                {"completed": true}
+                """);
+
+        assertThat(result).hasStatus(HttpStatus.OK);
+        assertThat(result).bodyJson().extractingPath("$.completed").isEqualTo(true);
+        assertThat(result).bodyJson().extractingPath("$.title").isEqualTo("Buy milk");
+    }
+
+    @Test
+    void changesUpdatedAtButNotCreatedAt() throws Exception {
+        Todo saved = saveTodo("Buy milk", false);
+
+        MvcTestResult result = patchTodo(saved.getId(), """
+                {"title": "Buy oat milk"}
+                """);
+
+        Todo updated = todoRepository.findById(saved.getId()).orElseThrow();
+        assertThat(updated.getCreatedAt()).isEqualTo(saved.getCreatedAt());
+        assertThat(updated.getUpdatedAt()).isAfter(saved.getUpdatedAt());
+        // The response must carry the new updated_at too, not the value from before the flush
+        String responseUpdatedAt = JsonPath.read(result.getResponse().getContentAsString(), "$.updated_at");
+        assertThat(Instant.parse(responseUpdatedAt)).isAfter(saved.getUpdatedAt());
+    }
+
+    @Test
+    void rejectsBlankTitleOnUpdate() {
+        Todo saved = saveTodo("Buy milk", false);
+
+        MvcTestResult result = patchTodo(saved.getId(), """
+                {"title": "  "}
+                """);
+
+        assertThat(result).hasStatus(HttpStatus.UNPROCESSABLE_CONTENT);
+        assertThat(result).hasContentType(MediaType.APPLICATION_PROBLEM_JSON);
+        assertThat(result).bodyJson().extractingPath("$.errors.title").asArray().contains("must not be blank");
+    }
+
+    @Test
+    void rejectsTitleOver200CharactersOnUpdate() {
+        Todo saved = saveTodo("Buy milk", false);
+
+        MvcTestResult result = patchTodo(saved.getId(), """
+                {"title": "%s"}
+                """.formatted("a".repeat(201)));
+
+        assertThat(result).hasStatus(HttpStatus.UNPROCESSABLE_CONTENT);
+        assertThat(result).bodyJson().extractingPath("$.errors.title").asArray().isNotEmpty();
+    }
+
+    @Test
+    void returns404WhenUpdatingUnknownId() {
+        MvcTestResult result = patchTodo(999_999L, """
+                {"title": "x"}
+                """);
+
+        assertThat(result).hasStatus(HttpStatus.NOT_FOUND);
+        assertThat(result).hasContentType(MediaType.APPLICATION_PROBLEM_JSON);
     }
 }

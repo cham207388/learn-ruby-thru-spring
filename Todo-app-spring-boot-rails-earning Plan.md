@@ -1758,12 +1758,24 @@ This app keeps them inline: one paged endpoint, everything visible in one place.
 
 **Acceptance criteria**
 
-- [ ] `PATCH` updates only the fields sent (`title`, `description`, `due_date`, `completed`)
-- [ ] `updated_at` changes; `created_at` does not
-- [ ] Same validation as create (422); unknown id returns 404
-- [ ] Tests cover partial update, mark complete, 404 and 422
+- [x] `PATCH` updates only the fields sent (`title`, `description`, `due_date`, `completed`)
+- [x] `updated_at` changes; `created_at` does not
+- [x] Same validation as create (422); unknown id returns 404
+- [x] Tests cover partial update, mark complete, 404 and 422
 
-**Spring track:** `UpdateTodoRequest` record with nullable fields; service loads the entity and applies non-null fields inside `@Transactional` (dirty checking does the update, no explicit `save`).
+**Spring track** (done)
+
+| File | Role |
+| --- | --- |
+| `todos/dto/UpdateTodoRequest` | Record with nullable `title`, `description`, `dueDate`, `completed`; `null` means "leave unchanged". `@Size(max = 200)` and `@Pattern(regexp = ".*\\S.*", message = "must not be blank")` on `title`: both pass on `null`, so the title is checked only when sent |
+| `todos/service/TodoService` | `updateTodo(@NotNull Long id, @NotNull @Valid UpdateTodoRequest)` in `@Transactional`: `findById` or `TodoNotFoundException`, set the non-null fields, `flush()`, return `TodoResponse.from(todo)`. Dirty checking writes the `UPDATE`; no `save` |
+| `todos/controller/TodoApi` / `TodoController` | `@PatchMapping("/{id}")` with `@Valid @RequestBody`, OpenAPI 200/404/422 |
+| `TodoControllerTest` | Partial update keeps `description`; mark complete; `updated_at` changes (in the database and the response), `created_at` does not; blank title and 201-character title give 422; unknown id 404 |
+| `TodoServiceTest` | `null` id or request, and a blank title from a non-HTTP caller, are rejected |
+
+- Why `flush()`: the auditing listener sets `updatedAt` when Hibernate writes the `UPDATE`, which normally happens at commit, after the response was already built. Without the flush the response shows the old `updated_at` (proven by removing it: the test fails).
+- Spring only maps `PATCH`; Rails maps both `PATCH` and `PUT` to `update`.
+- A `null` in the JSON and a missing key look the same to the record, so Spring cannot clear a field. Rails can (`"description": null`). Note it in `LEARNINGS.md`.
 
 **Rails track**
 
@@ -1796,8 +1808,7 @@ Routes line after Step 1: `resources :todos, only: %i[index show create update]`
 
 ```ruby
 class Api::TodosController < ApplicationController
-  DEFAULT_SIZE = 20
-  MAX_SIZE = 100
+  include Pagy::Method
 
   before_action :set_todo, only: %i[show update]
 
@@ -1812,15 +1823,9 @@ class Api::TodosController < ApplicationController
     todos = Todo.order(created_at: :desc, id: :desc)
     todos = todos.by_completed(completed) unless completed.nil?
 
-    page = [ params.fetch(:page, 1).to_i, 1 ].max
-    size = params.fetch(:size, DEFAULT_SIZE).to_i.clamp(1, MAX_SIZE)
+    pagy, items = pagy(:offset, todos, limit: 20, client_limit: 100, limit_key: "size")
 
-    render json: {
-      items: todos.limit(size).offset((page - 1) * size),
-      page:,
-      size:,
-      total: todos.count
-    }
+    render json: { items:, page: pagy.page, size: pagy.limit, total: pagy.count }
   end
 
   # @summary Get one todo
@@ -1961,7 +1966,7 @@ todo.save
 
 - `travel 1.minute do ... end` runs the block with the clock moved forward, then restores it.
 - `assert_operator a, :>, b` asserts `a > b` and prints both values on failure.
-- Expect: `bin/rails test` shows 21 runs, 0 failures.
+- Expect: `bin/rails test` shows 22 runs, 0 failures (21 if you kept Step 5's hand pagination instead of pagy).
 
 **What to notice:** `before_action` handles cross-cutting code. Both stacks track changes: Hibernate dirty checking vs Active Record `changed?` / `saved_changes`.
 
@@ -2038,8 +2043,7 @@ end
 
 ```ruby
 class Api::TodosController < ApplicationController
-  DEFAULT_SIZE = 20
-  MAX_SIZE = 100
+  include Pagy::Method
 
   before_action :set_todo, only: %i[show update destroy]
 
@@ -2054,15 +2058,9 @@ class Api::TodosController < ApplicationController
     todos = Todo.order(created_at: :desc, id: :desc)
     todos = todos.by_completed(completed) unless completed.nil?
 
-    page = [ params.fetch(:page, 1).to_i, 1 ].max
-    size = params.fetch(:size, DEFAULT_SIZE).to_i.clamp(1, MAX_SIZE)
+    pagy, items = pagy(:offset, todos, limit: 20, client_limit: 100, limit_key: "size")
 
-    render json: {
-      items: todos.limit(size).offset((page - 1) * size),
-      page:,
-      size:,
-      total: todos.count
-    }
+    render json: { items:, page: pagy.page, size: pagy.limit, total: pagy.count }
   end
 
   # @summary Get one todo
@@ -2177,7 +2175,7 @@ Todo.where(title: "b").delete_all
 </details>
 
 - `assert_empty response.body` checks that 204 sends no body.
-- Expect: `bin/rails test` shows 23 runs, 0 failures.
+- Expect: `bin/rails test` shows 24 runs, 0 failures (23 if you kept Step 5's hand pagination instead of pagy).
 
 **What to notice:** `resources :todos` now replaces five mapping annotations. Read the `bin/rails routes` table it generated.
 
