@@ -15,6 +15,7 @@ import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -95,4 +96,16 @@ public interface TodoApi {
                             schema = @Schema(implementation = ProblemDetail.class)))
     @PatchMapping("/{id}")
     TodoResponse updateTodo(@PathVariable Long id, @Valid @RequestBody UpdateTodoRequest request);
+
+    @Operation(summary = "Delete a todo")
+    @ApiResponse(responseCode = "204", description = "Deleted; no body")
+    @ApiResponse(
+            responseCode = "404",
+            description = "No todo with this id",
+            content =
+                    @Content(
+                            mediaType = "application/problem+json",
+                            schema = @Schema(implementation = ProblemDetail.class)))
+    @DeleteMapping("/{id}")
+    ResponseEntity<Void> deleteTodo(@PathVariable Long id);
 }

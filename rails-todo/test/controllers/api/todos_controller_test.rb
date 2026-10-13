@@ -146,4 +146,25 @@ class Api::TodosControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :not_found
   end
+
+  test "deletes a todo" do
+    todo = todos(:buy_milk)
+
+    assert_difference("Todo.count", -1) do
+      delete api_todo_url(todo)
+    end
+
+    assert_response :no_content
+    assert_empty response.body
+
+    get api_todo_url(todo)
+    assert_response :not_found
+  end
+
+  test "returns 404 when deleting an unknown id" do
+    delete api_todo_url(id: 999_999)
+
+    assert_response :not_found
+    assert_equal "application/problem+json", response.media_type
+  end
 end

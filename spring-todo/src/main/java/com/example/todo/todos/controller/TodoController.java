@@ -44,4 +44,10 @@ public class TodoController implements TodoApi {
     public TodoResponse updateTodo(Long id, UpdateTodoRequest request) {
         return todoService.updateTodo(id, request);
     }
+
+    @Override
+    public ResponseEntity<Void> deleteTodo(Long id) {
+        todoService.deleteTodo(id);
+        return ResponseEntity.noContent().build();
+    }
 }

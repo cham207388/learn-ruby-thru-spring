@@ -2004,11 +2004,22 @@ todo.save
 
 **Acceptance criteria**
 
-- [ ] Delete returns 204 with no body; a later `GET` returns 404
-- [ ] Unknown id returns 404
-- [ ] Tests cover success and 404
+- [x] Delete returns 204 with no body; a later `GET` returns 404
+- [x] Unknown id returns 404
+- [x] Tests cover success and 404
 
-**Spring track:** `TodoService.delete` checks existence (`existsById` or find-then-delete) and throws not-found; controller returns `ResponseEntity.noContent()`.
+**Spring track** (done)
+
+| File | Role |
+| --- | --- |
+| `todos/repository/TodoRepository` | `@Modifying @Query("delete from Todo t where t.id = :id") int deleteTodoById(Long id)`: one `DELETE` statement that returns the number of rows removed |
+| `todos/service/TodoService` | `deleteTodo(@NotNull Long id)` in `@Transactional`; throws `TodoNotFoundException` when 0 rows were removed |
+| `todos/controller/TodoApi` / `TodoController` | `@DeleteMapping("/{id}")` returns `ResponseEntity.noContent().build()`; OpenAPI 204 and 404 |
+| `TodoControllerTest` | Delete returns 204 with an empty body and a later `GET` returns 404; unknown id returns 404 Problem Details |
+| `TodoServiceTest` | A `null` id is rejected |
+
+- Why not `deleteById`: since Spring Data 3 it silently ignores a missing id, so a 404 would need a second query (`existsById`). The bulk `DELETE` answers both questions in one statement.
+- Trade-off: a JPQL bulk delete skips the persistence context and entity callbacks (`@PreRemove`, cascades). Fine for a flat table; use find-then-`delete` once entities have children or lifecycle hooks. Rails' `destroy!` always runs callbacks.
 
 **Rails track**
 

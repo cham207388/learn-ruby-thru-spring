@@ -1,10 +1,14 @@
 class Api::TodosController < ApplicationController
   include Pagy::Method
 
-  before_action :set_todo, only: %i[show update]
+  before_action :set_todo, only: %i[show update destroy]
 
   # @summary List todos, newest first
   # @tags Todos
+  # @parameter completed(query) [Boolean] Filter by completion; omit for all
+  # @parameter page(query) [Integer] 1-based page number
+  # @parameter size(query) [Integer] Page size, 1 to 100
+  # @response Page of todos(200) [Hash{items: Array<Todo>, page: Integer, size: Integer, total: Integer}]
   def index
     completed = ActiveModel::Type::Boolean.new.cast(params[:completed])
     todos = Todo.order(created_at: :desc, id: :desc)
@@ -52,9 +56,18 @@ class Api::TodosController < ApplicationController
     end
   end
 
+  # @summary Delete a todo
+  # @tags Todos
+  # @response Deleted, no body(204) [Hash{}]
+  # @response No todo with this id(404) [Hash{title: String, status: Integer, detail: String, instance: String}]
+  def destroy
+    @todo.destroy!
+    head :no_content
+  end
+
   private
 
-  # Runs before show and update; an unknown id raises RecordNotFound, handled in ApplicationController
+  # Runs before show, update and destroy; an unknown id raises RecordNotFound, handled in ApplicationController
   def set_todo
     @todo = Todo.find(params[:id])
   end

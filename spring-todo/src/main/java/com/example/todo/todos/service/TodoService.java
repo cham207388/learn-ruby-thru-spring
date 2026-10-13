@@ -58,6 +58,13 @@ public class TodoService {
         return TodoResponse.from(todo);
     }
 
+    @Transactional
+    public void deleteTodo(@NotNull Long id) {
+        if (todoRepository.deleteTodoById(id) == 0) {
+            throw new TodoNotFoundException(id);
+        }
+    }
+
     @Transactional(readOnly = true)
     public TodoResponse getTodo(@NotNull Long id) {
         return todoRepository.findTodoResponseById(id).orElseThrow(() -> new TodoNotFoundException(id));

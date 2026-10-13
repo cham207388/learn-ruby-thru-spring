@@ -54,4 +54,11 @@ class TodoServiceTest {
                 .isInstanceOf(ConstraintViolationException.class)
                 .hasMessageContaining("updateTodo.request.title");
     }
+
+    @Test
+    void rejectsNullIdOnDelete() {
+        assertThatThrownBy(() -> todoService.deleteTodo(null))
+                .isInstanceOf(ConstraintViolationException.class)
+                .hasMessageContaining("deleteTodo.id");
+    }
 }

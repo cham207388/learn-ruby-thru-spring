@@ -278,4 +278,27 @@ class TodoControllerTest {
         assertThat(result).hasStatus(HttpStatus.NOT_FOUND);
         assertThat(result).hasContentType(MediaType.APPLICATION_PROBLEM_JSON);
     }
+
+    @Test
+    void deletesATodo() {
+        Todo saved = saveTodo("Buy milk", false);
+
+        MvcTestResult result =
+                mockMvcTester.delete().uri("/api/todos/{id}", saved.getId()).exchange();
+
+        assertThat(result).hasStatus(HttpStatus.NO_CONTENT);
+        assertThat(result.getResponse().getContentLength()).isZero();
+        assertThat(todoRepository.existsById(saved.getId())).isFalse();
+        assertThat(mockMvcTester.get().uri("/api/todos/{id}", saved.getId()).exchange())
+                .hasStatus(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void returns404WhenDeletingUnknownId() {
+        MvcTestResult result = mockMvcTester.delete().uri("/api/todos/999999").exchange();
+
+        assertThat(result).hasStatus(HttpStatus.NOT_FOUND);
+        assertThat(result).hasContentType(MediaType.APPLICATION_PROBLEM_JSON);
+        assertThat(result).bodyJson().extractingPath("$.detail").isEqualTo("Todo 999999 not found");
+    }
 }
