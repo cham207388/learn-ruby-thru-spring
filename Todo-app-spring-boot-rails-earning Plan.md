@@ -1309,17 +1309,19 @@ end
 - [ ] Unknown id returns 404 Problem Details
 - [ ] Tests cover list, filter, show and 404
 
-**Spring track** (done)
+**Spring track** (done; refactored to the `spring-boot-java` guidelines, see `spring-todo-improvement-plan.md`)
 
 | File | Role |
 | --- | --- |
-| `repository/TodoRepository` | Derived query `Page<Todo> findByCompleted(boolean, Pageable)`. Spring Data writes the `SELECT ... LIMIT/OFFSET` and the `COUNT` query |
-| `dto/PageResponse<T>` | Shared list shape `{items, page, size, total}`. Converts Spring's 0-based `Page` to 1-based `page` |
-| `service/TodoService` | `list(completed, page, size)` and `get(id)` with `@Transactional(readOnly = true)`. Sort `created_at desc, id desc`. Clamps `page` to at least 1 and `size` to 1..100 |
-| `exception/TodoNotFoundException` | Thrown by `get` for an unknown id |
-| `GlobalExceptionHandler` | `@ExceptionHandler(TodoNotFoundException)` returns 404 `ProblemDetail` with detail `Todo <id> not found` |
-| `TodoApi` / `TodoController` | `TodoApi` declares `@GetMapping` with `@RequestParam` `completed` (optional), `page` (default 1), `size` (default 20), `@GetMapping("/{id}")`, and OpenAPI `@Operation`, `@Parameter`, 404 `@ApiResponse`. `TodoController` implements both methods |
-| `TodoControllerTest` | Newest first with page metadata, filter true/false, `page=2&size=1`, `size=500` clamps to 100, show 200, unknown id 404 Problem Details |
+| `todos/repository/TodoRepository` | Derived queries that return `TodoResponse` records: `findAllBy(Pageable)`, `findByCompleted(boolean, Pageable)`, `findTodoResponseById(Long)`. Spring Data writes the `COUNT` query and the `SELECT ... LIMIT/OFFSET`, and builds the records without loading entities |
+| `todos/dto/PageResponse<T>` | Shared list shape `{items, page, size, total}`. `from(Page<T>)` converts Spring's 0-based `Page` to a 1-based `page` |
+| `application.yaml` | `spring.data.web.pageable`: `one-indexed-parameters: true`, `default-page-size: 20`, `max-page-size: 100`. Spring Data resolves `?page=&size=` into a `Pageable`; no hand-written clamping |
+| `todos/service/TodoService` | `@Validated`. `listTodos(Boolean completed, @NotNull Pageable)` applies the fixed sort `created_at desc, id desc`; `getTodo(@NotNull Long id)`. Both `@Transactional(readOnly = true)` |
+| `exception/TodoNotFoundException` | Thrown by `getTodo` for an unknown id |
+| `exception/GlobalExceptionHandler` | `@ExceptionHandler(TodoNotFoundException)` returns 404 `ProblemDetail` with detail `Todo <id> not found` |
+| `todos/controller/TodoApi` / `TodoController` | `TodoApi` declares `listTodos(@RequestParam(required = false) Boolean completed, @Parameter(hidden = true) Pageable pageable)` with `page` and `size` documented by method-level `@Parameter`s, and `getTodo(@PathVariable Long id)` with a 404 `@ApiResponse`. `TodoController` delegates to `TodoService` |
+| `TodoControllerTest` | Newest first with page metadata, filter true/false, `page=2&size=1`, `size=500` gives 100, `size=0` gives 20, show 200, unknown id 404 Problem Details |
+| `TodoServiceTest`, `ArchitectureTest` | A `null` id, request or pageable is rejected with `ConstraintViolationException`; ArchUnit guards layers, injection style and `@Validated` services |
 
 - Spring rejects `?completed=abc` with 400 Problem Details (`Failed to convert 'completed' with value: 'abc'`). Rails `ActiveModel::Type::Boolean` casts any unknown string to `true`. Note the difference in `LEARNINGS.md`.
 
@@ -1591,7 +1593,89 @@ file_taxes:
 - `999_999`: underscores in number literals are allowed, like Java's `999_999`.
 - Expect: `bin/rails test` shows 16 runs, 0 failures.
 
-**Step 7: Optional: try a gem.** `bundle add pagy`, replace your hand pagination, and compare. `bundle add` edits `Gemfile` and runs `bundle install`, like adding a line to `build.gradle.kts` and syncing. Revert if you prefer your version.
+**Step 7: Optional: replace hand pagination with pagy.** `bundle add pagy`, then replace part 3 of Step 5: `DEFAULT_SIZE`, `MAX_SIZE`, the `page` and `size` lines, `limit`/`offset` and `todos.count`. The filter and the ordered query stay. Revert if you prefer your version.
+
+- `bundle add` edits `Gemfile` and runs `bundle install`, like adding a line to `build.gradle.kts` and syncing.
+- This plan uses **pagy 43**, which rewrote the API. Tutorials that use `Pagy::Backend` or `pagy_metadata` are for older versions and do not work.
+
+<details>
+<summary>Code to type: <code>app/controllers/api/todos_controller.rb</code> (top of the class and <code>index</code>)</summary>
+
+```ruby
+class Api::TodosController < ApplicationController
+  include Pagy::Method
+
+  # @summary List todos, newest first
+  # @tags Todos
+  # @parameter completed(query) [Boolean] Filter by completion; omit for all
+  # @parameter page(query) [Integer] 1-based page number
+  # @parameter size(query) [Integer] Page size, 1 to 100
+  # @response Page of todos(200) [Hash{items: Array<Todo>, page: Integer, size: Integer, total: Integer}]
+  def index
+    completed = ActiveModel::Type::Boolean.new.cast(params[:completed])
+    todos = Todo.order(created_at: :desc, id: :desc)
+    todos = todos.by_completed(completed) unless completed.nil?
+
+    pagy, items = pagy(:offset, todos, limit: 20, client_limit: 100, limit_key: "size")
+
+    render json: { items:, page: pagy.page, size: pagy.limit, total: pagy.count }
+  end
+```
+
+</details>
+
+- `include Pagy::Method` adds a `pagy` method to this controller only. A module mixed into a class: Ruby's answer to sharing behavior without inheritance.
+- `pagy` returns two values: the page details and the records for this page. `pagy, items = ...` unpacks both (multiple assignment).
+- `limit: 20` is the default size. `client_limit: 100` lets the client choose the size and caps it at 100; without it pagy ignores the client's size. `limit_key: "size"` keeps our `?size=` name (pagy's default is `?limit=`).
+- The SQL is the same as your hand version: `SELECT COUNT(*)`, then `SELECT ... LIMIT 20 OFFSET 0`. Check the log.
+
+Pagy raises `Pagy::OptionError` for `?size=-1` instead of clamping it. Unhandled, that is a 500. Map it to 400 Problem Details next to the not-found handler:
+
+<details>
+<summary>Code to type: <code>app/controllers/application_controller.rb</code> (add the second <code>rescue_from</code> and <code>bad_request</code>)</summary>
+
+```ruby
+class ApplicationController < ActionController::API
+  rescue_from ActiveRecord::RecordNotFound, with: :not_found
+  rescue_from Pagy::OptionError, with: :bad_request
+
+  private
+
+  # render_problem and not_found unchanged
+
+  # Pagy rejects values it cannot page with, such as ?size=-1
+  def bad_request(error)
+    render_problem(status: :bad_request, detail: error.message)
+  end
+end
+```
+
+</details>
+
+<details>
+<summary>Code to type: <code>test/controllers/api/todos_controller_test.rb</code> (add inside the class)</summary>
+
+```ruby
+  test "rejects a negative size with 400 problem details" do
+    get api_todos_url, params: { size: -1 }
+
+    assert_response :bad_request
+    assert_equal "application/problem+json", response.media_type
+  end
+```
+
+</details>
+
+- Expect: `bin/rails test` shows 17 runs, 0 failures; `bin/rubocop` clean.
+- Edge cases change with pagy. Note the result in `LEARNINGS.md`:
+
+| Request | Hand version | Pagy | Spring |
+| --- | --- | --- | --- |
+| `size=0` | size 1 | size 20 | size 20 |
+| `page=abc`, `page=0` | page 1 | page 1 | page 1 |
+| `size=500` | size 100 | size 100 | size 100 |
+| `page=99` | empty `items` | empty `items` | empty `items` |
+| `size=-1` | size 1 | 400 Problem Details | size 20 |
 
 **What to notice:** scopes are chainable and lazy. Watch the SQL in the Rails log and use `.to_sql` in the console, the way you would turn on `show-sql` in Hibernate.
 

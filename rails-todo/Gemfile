@@ -47,3 +47,5 @@ group :development, :test do
 end
 
 gem "oas_rails", "~> 1.4"
+
+gem "pagy", "~> 43.7"

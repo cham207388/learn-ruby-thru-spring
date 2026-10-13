@@ -1,4 +1,22 @@
 class Api::TodosController < ApplicationController
+  include Pagy::Method
+
+  # @summary List todos, newest first
+  # @tags Todos
+  # @parameter completed(query) [Boolean] Filter by completion; omit for all
+  # @parameter page(query) [Integer] 1-based page number
+  # @parameter size(query) [Integer] Page size, 1 to 100
+  # @response Page of todos(200) [Hash{items: Array<Todo>, page: Integer, size: Integer, total: Integer}]
+  def index
+    completed = ActiveModel::Type::Boolean.new.cast(params[:completed])
+    todos = Todo.order(created_at: :desc, id: :desc)
+    todos = todos.by_completed(completed) unless completed.nil?
+
+    pagy, items = pagy(:offset, todos, limit: 20, client_limit: 100, limit_key: "size")
+
+    render json: { items:, page: pagy.page, size: pagy.limit, total: pagy.count }
+  end
+
   # @summary Create a todo
   # @tags Todos
   # @request_body The todo to create [!Hash{title: String, description: String, due_date: String}]
@@ -12,6 +30,10 @@ class Api::TodosController < ApplicationController
     else
       render_problem(status: :unprocessable_content, detail: "Validation failed", errors: todo.errors.to_hash)
     end
+  end
+
+  def show
+    render Todo.find(params[:id])
   end
 
   private

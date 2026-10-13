@@ -4,6 +4,6 @@ Rails.application.routes.draw do
   mount OasRails::Engine => "/docs"
 
   namespace :api do
-    resources :todos, only: %i[create show]
+    resources :todos, only: %i[index create show]
   end
 end

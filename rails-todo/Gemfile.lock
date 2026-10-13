@@ -183,6 +183,10 @@ GEM
     oas_rails (1.4.0)
       easy_talk_two (~> 1.1.3)
       oas_core (>= 1.1.0)
+    pagy (43.7.1)
+      json
+      uri
+      yaml
     parallel (2.3.0)
     parser (3.3.12.0)
       ast (~> 2.4.1)
@@ -323,6 +327,7 @@ GEM
       base64
       websocket-extensions (>= 0.1.0)
     websocket-extensions (0.1.5)
+    yaml (0.4.0)
     yard (0.9.45)
     zeitwerk (2.8.3)
 
@@ -345,6 +350,7 @@ DEPENDENCIES
   debug
   image_processing (~> 1.2)
   oas_rails (~> 1.4)
+  pagy (~> 43.7)
   pg (~> 1.1)
   puma (>= 5.0)
   rails (~> 8.1.4)
@@ -427,6 +433,7 @@ CHECKSUMS
   nokogiri (1.19.4-x86_64-linux-musl) sha256=17dfb7c1fa194ae02fbf7c51a7afc8d278045ab3fdacfd86f91d02d7b274470b
   oas_core (1.4.2) sha256=97cb9c640caf2480e54c9bccf18fca4053a4241cf4f550ae6849c067a358e390
   oas_rails (1.4.0) sha256=0dadaa37a56f9760efcca1ff5a8735fdb64af43a5852e65265d2e0153624f427
+  pagy (43.7.1) sha256=f6f2498132bcbfb08741a3771373c9bb9dd252086a306f0302cb325e1a04202d
   parallel (2.3.0) sha256=f75a3e904101ce6a1ccb6b8dc800cbafd42166d83330192438dcf29395167a6f
   parser (3.3.12.0) sha256=21a6d7f755d5a24dfbdc6e6b772e4e879a52e7631a88bc5a3a134606052c9828
   pg (1.7.0) sha256=f7b536501284e883d4c9ef86dbde0313063e4aaafc23575b0017b0d572a26afb
@@ -483,6 +490,7 @@ CHECKSUMS
   useragent (0.16.11) sha256=700e6413ad4bb954bb63547fa098dddf7b0ebe75b40cc6f93b8d54255b173844
   websocket-driver (0.8.2) sha256=97c556b019bf3410b4961002ac501621e9322d3f8a7bc02161a09301cc4c4146
   websocket-extensions (0.1.5) sha256=1c6ba63092cda343eb53fc657110c71c754c56484aad42578495227d717a8241
+  yaml (0.4.0) sha256=240e69d1e6ce3584d6085978719a0faa6218ae426e034d8f9b02fb54d3471942
   yard (0.9.45) sha256=52e211493f7cb8a3ebf7e104a25a1e73937a3103092545d34cb88fafebb3dc51
   zeitwerk (2.8.3) sha256=2c85125a8467ce069e20123d1e709a08955c9d29c118c25b46b7b7fafdbb92e5
 
