@@ -23,6 +23,17 @@
             "username": "todo",
             "password": "5b2d00e2b47e74f1febf6868d3cdd39f",
             "database": "todo_spring"
+        },
+        {
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5423,
+            "driver": "PostgreSQL",
+            "name": "dotnet",
+            "database": "todo_dotnet",
+            "username": "todo",
+            "password": "5b2d00e2b47e74f1febf6868d3cdd39f"
         }
     ]
 }
