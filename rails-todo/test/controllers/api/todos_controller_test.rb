@@ -99,5 +99,4 @@ class Api::TodosControllerTest < ActionDispatch::IntegrationTest
     assert_equal "application/problem+json", response.media_type
     assert_equal 404, response.parsed_body["status"]
   end
-
 end

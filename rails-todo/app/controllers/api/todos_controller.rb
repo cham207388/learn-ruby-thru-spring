@@ -32,8 +32,12 @@ class Api::TodosController < ApplicationController
     end
   end
 
+  # @summary Get one todo
+  # @tags Todos
+  # @response The todo(200) [Todo]
+  # @response No todo with this id(404) [Hash{title: String, status: Integer, detail: String, instance: String}]
   def show
-    render Todo.find(params[:id])
+    render json: Todo.find(params[:id])
   end
 
   private

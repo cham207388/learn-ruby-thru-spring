@@ -1304,10 +1304,10 @@ end
 
 **Acceptance criteria**
 
-- [ ] List returns todos newest first; `?completed=true|false` filters
-- [ ] List is paginated (default 20, max 100) with page metadata
-- [ ] Unknown id returns 404 Problem Details
-- [ ] Tests cover list, filter, show and 404
+- [x] List returns todos newest first; `?completed=true|false` filters
+- [x] List is paginated (default 20, max 100) with page metadata
+- [x] Unknown id returns 404 Problem Details
+- [x] Tests cover list, filter, show and 404
 
 **Spring track** (done; refactored to the `spring-boot-java` guidelines, see `spring-todo-improvement-plan.md`)
 
@@ -1593,10 +1593,11 @@ file_taxes:
 - `999_999`: underscores in number literals are allowed, like Java's `999_999`.
 - Expect: `bin/rails test` shows 16 runs, 0 failures.
 
-**Step 7: Optional: replace hand pagination with pagy.** `bundle add pagy`, then replace part 3 of Step 5: `DEFAULT_SIZE`, `MAX_SIZE`, the `page` and `size` lines, `limit`/`offset` and `todos.count`. The filter and the ordered query stay. Revert if you prefer your version.
+**Step 7: Replace hand pagination with pagy.** This repo's `rails-todo` uses pagy for `index`. Step 5's hand version is still worth writing first: it shows what pagy does for you.
 
-- `bundle add` edits `Gemfile` and runs `bundle install`, like adding a line to `build.gradle.kts` and syncing.
-- This plan uses **pagy 43**, which rewrote the API. Tutorials that use `Pagy::Backend` or `pagy_metadata` are for older versions and do not work.
+`bundle add pagy` adds `gem "pagy", "~> 43.7"` to the `Gemfile` and runs `bundle install`, like adding a line to `build.gradle.kts` and syncing. Pagy 43 rewrote its API: tutorials that use `Pagy::Backend`, `pagy_metadata` or `items:` are for older versions and do not work.
+
+**What pagy replaces.** Part 3 of Step 5: the `DEFAULT_SIZE` and `MAX_SIZE` constants, the `page` and `size` lines, `limit`/`offset`, and `todos.count`. Parts 1 and 2 (the filter and the ordered query) stay, because pagy pages any query you give it.
 
 <details>
 <summary>Code to type: <code>app/controllers/api/todos_controller.rb</code> (top of the class and <code>index</code>)</summary>
@@ -1624,15 +1625,34 @@ class Api::TodosController < ApplicationController
 
 </details>
 
-- `include Pagy::Method` adds a `pagy` method to this controller only. A module mixed into a class: Ruby's answer to sharing behavior without inheritance.
-- `pagy` returns two values: the page details and the records for this page. `pagy, items = ...` unpacks both (multiple assignment).
-- `limit: 20` is the default size. `client_limit: 100` lets the client choose the size and caps it at 100; without it pagy ignores the client's size. `limit_key: "size"` keeps our `?size=` name (pagy's default is `?limit=`).
-- The SQL is the same as your hand version: `SELECT COUNT(*)`, then `SELECT ... LIMIT 20 OFFSET 0`. Check the log.
+**How it works, line by line**
 
-Pagy raises `Pagy::OptionError` for `?size=-1` instead of clamping it. Unhandled, that is a 500. Map it to 400 Problem Details next to the not-found handler:
+- `include Pagy::Method` mixes a `pagy` method into this controller only. A module included in a class is Ruby's way to share behavior without inheritance, like a Java interface with default methods. Only `index` pages, so it is not in `ApplicationController`.
+- `pagy(:offset, todos, ...)`: `:offset` picks the paginator (classic `LIMIT/OFFSET` paging). Pagy also offers `:keyset` (seek by the last row seen, fast on huge tables), `:countless` (skips the `COUNT`) and others; offset matches the Spring app.
+- It reads `page` and `size` from the request itself (it calls the controller's `request`), so you do not pass `params`.
+- It returns two values. `pagy, items = ...` is multiple assignment: `pagy` is a `Pagy::Offset` with the page details (`page`, `limit`, `count`, `last`, `previous`, `next`), and `items` is your query with `.offset(...).limit(...)` added. `items` is still lazy: the `SELECT` runs when `render` serializes it.
+- The options:
+
+| Option | Meaning | Without it |
+| --- | --- | --- |
+| `limit: 20` | Default page size | Pagy's default, also 20 |
+| `client_limit: 100` | Let the client choose the size, capped at 100 | Pagy **ignores** `?size=` and always uses `limit` |
+| `limit_key: "size"` | Read the size from `?size=` | Pagy reads `?limit=` |
+
+- `render json: { items:, page: pagy.page, size: pagy.limit, total: pagy.count }` keeps the shared contract. Pagy names the size `limit` and the total `count`; we rename them in the hash.
+
+**What pagy does with the request** (from the pagy 43 source)
+
+1. `page`: `params["page"].to_i`, at least 1. `abc` and `0` become 1.
+2. `size`: `params["size"].to_i`. `0` or missing → `limit` (20); otherwise the smaller of the value and `client_limit` (100).
+3. `total`: `todos.count(:all)`. Active Record drops the `ORDER BY` for a count, so the log shows `SELECT COUNT(*) FROM "todos"`.
+4. Builds the page details and checks them: `limit` and `page` must be at least 1. A negative size fails here with `Pagy::OptionError`.
+5. Adds `OFFSET (page - 1) * size LIMIT size` to your query. A page past the end returns an empty `items` list, not an error (pass `raise_range_error: true` to get `Pagy::RangeError` instead).
+
+**Handle pagy's error.** Unhandled, `Pagy::OptionError` is a 500. Map it to 400 Problem Details in `ApplicationController`, next to the not-found handler:
 
 <details>
-<summary>Code to type: <code>app/controllers/application_controller.rb</code> (add the second <code>rescue_from</code> and <code>bad_request</code>)</summary>
+<summary>Code to type: <code>app/controllers/application_controller.rb</code> (add the <code>rescue_from</code> and <code>bad_request</code>)</summary>
 
 ```ruby
 class ApplicationController < ActionController::API
@@ -1666,10 +1686,33 @@ end
 
 </details>
 
-- Expect: `bin/rails test` shows 17 runs, 0 failures; `bin/rubocop` clean.
-- Edge cases change with pagy. Note the result in `LEARNINGS.md`:
+- Expect: `bin/rails test` shows 17 runs, 0 failures; `bin/rubocop` clean. Step 6's list tests pass unchanged: the contract did not move.
+- The log shows the same two queries as the hand version: `SELECT COUNT(*)`, then `SELECT ... LIMIT 20 OFFSET 0`.
 
-| Request | Hand version | Pagy | Spring |
+**Pagy next to Spring Data**
+
+| Concern | Spring (`spring-todo`) | Rails with pagy |
+| --- | --- | --- |
+| Read `page`/`size` from the request | `Pageable` parameter, resolved by Spring Data | `pagy(...)` reads the request |
+| Defaults and cap | `spring.data.web.pageable.*` in `application.yaml` | `limit:`, `client_limit:` options |
+| 1-based pages | `one-indexed-parameters: true` | Pagy's default |
+| Count + page query | `Page<T>` runs `COUNT` and `LIMIT/OFFSET` | `pagy.count` and the paged `items` relation |
+| Page details | `Page#getNumber`, `getSize`, `getTotalElements` | `pagy.page`, `pagy.limit`, `pagy.count` |
+
+**Defaults for every endpoint.** With more paged endpoints, move the options to `config/initializers/pagy.rb` and call `pagy(:offset, todos)`. `Pagy::OPTIONS` is a global hash merged into every call, like `spring.data.web.pageable.*`:
+
+```ruby
+# config/initializers/pagy.rb
+Pagy::OPTIONS[:limit] = 20
+Pagy::OPTIONS[:client_limit] = 100
+Pagy::OPTIONS[:limit_key] = "size"
+```
+
+This app keeps them inline: one paged endpoint, everything visible in one place.
+
+**Edge cases.** Pagy changes a few compared with Step 5. Note the result in `LEARNINGS.md`:
+
+| Request | Hand version (Step 5) | Pagy | Spring |
 | --- | --- | --- | --- |
 | `size=0` | size 1 | size 20 | size 20 |
 | `page=abc`, `page=0` | page 1 | page 1 | page 1 |
