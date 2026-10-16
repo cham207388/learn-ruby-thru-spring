@@ -928,7 +928,7 @@ git commit -m "US-1.3 .NET skeleton"
 ---
 
 <details>
-<summary><span style="font-weight: bold; color: cyan;"><b>Phase 2: Todo model and migration</b> (US-2.1 detailed; US-2.2 outline)</span></summary>
+<summary><span style="font-weight: bold; color: cyan;"><b>Phase 2: Todo model and migration</b></span></summary>
 
 Phase 2 creates the `todos` table through an EF Core migration and maps it to an entity, before any endpoint exists.
 
@@ -1013,6 +1013,7 @@ git diff Directory.Packages.props src/TodoApi/TodoApi.csproj
 | `Microsoft.EntityFrameworkCore.Design` | Design-time code that `dotnet ef` needs to create migrations | Flyway Gradle plugin |
 
 - `Design` got `<PrivateAssets>all</PrivateAssets>` automatically. It is used to build migrations, not at run time, and does not flow to projects that reference `TodoApi`. Like a Gradle `compileOnly`.
+- `git add` may warn `CRLF will be replaced by LF` for `TodoApi.csproj`: `dotnet add package` writes Windows line endings on the lines it adds. Harmless, because your git setting `core.autocrlf=input` stores LF. To clean the file on disk too: `sed -i '' $'s/\r$//' src/TodoApi/TodoApi.csproj`.
 - `EFCore.NamingConventions` is a community package, not from Microsoft. It is widely used with Npgsql; its major version follows EF Core's.
 
 </details>
@@ -1439,13 +1440,570 @@ git commit -m "US-2.1 todos table (EF Core migration)"
 <details>
 <summary><span style="font-weight: bold; color: green;"><b>US-2.2 Map the Todo model</b></span></summary>
 
-*As a developer, I want a Todo entity with audit timestamps so `created_at` / `updated_at` fill themselves.*
+*As a developer, I want `created_at` / `updated_at` filled automatically and the schema covered by tests against real Postgres.*
 
-- [ ] `AuditTimestampsInterceptor : SaveChangesInterceptor` using `TimeProvider` (the `@EnableJpaAuditing` equivalent)
-- [ ] `/health` also checks the database (`Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore`, `AddDbContextCheck<TodoDbContext>()`)
-- [ ] Testcontainers fixture: `PostgreSqlContainer` + `WebApplicationFactory`, migrations applied once per run
-- [ ] Persistence tests: saves with defaults and timestamps; null title and 201-character title rejected by the database
-- [ ] What to notice: EF Core does not run DataAnnotations on save. Validation happens at the HTTP boundary, as in Spring, not in the model as in Rails
+**What this story does, in plain terms.** Four moves:
+
+1. **Automatic timestamps** (Steps 2-5): a small class that EF Core calls before every save. It stamps `created_at` and `updated_at` from a clock you can fake in tests.
+2. **Health check sees the database** (Steps 5-6): `/health` answers 503 when Postgres is down.
+3. **A test database per run** (Steps 7-8): tests start their own Postgres in Docker (Testcontainers), apply the migrations to it, and never touch `todo_dotnet`.
+4. **Tests for the table rules** (Step 9): timestamps, defaults, `NOT NULL`, `varchar(200)`.
+
+No new migration and no endpoints: the table from US-2.1 is unchanged.
+
+- [ ] Timestamps filled by an interceptor using `TimeProvider`
+- [ ] `/health` includes a database check
+- [ ] Testcontainers fixture shared by all tests; migrations applied to it
+- [ ] Persistence tests for defaults, timestamps, `NOT NULL` and max length
+
+<details>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 1: Add the packages.</b></span></summary>
+
+**Run in:** `dotnet-todo/`.
+
+```bash
+dotnet add src/TodoApi package Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore
+dotnet add tests/TodoApi.Tests package Testcontainers.PostgreSql
+dotnet add tests/TodoApi.Tests package Microsoft.Extensions.TimeProvider.Testing
+sed -i '' $'s/\r$//' src/TodoApi/TodoApi.csproj tests/TodoApi.Tests/TodoApi.Tests.csproj
+git diff Directory.Packages.props
+```
+
+- Expect: three new `PackageVersion` lines: `Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore 10.0.13`, `Microsoft.Extensions.TimeProvider.Testing 10.10.0`, `Testcontainers.PostgreSql 4.16.0`.
+- The `sed` line removes the Windows line endings `dotnet add package` writes (US-2.1 Step 2). Running it now avoids the `CRLF will be replaced by LF` warning at commit time.
+
+| Package | Project | Role | Spring counterpart |
+| --- | --- | --- | --- |
+| `Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore` | app | Health check that asks the `DbContext` "can you connect?" | Actuator's `db` health indicator |
+| `Testcontainers.PostgreSql` | tests | Starts a throwaway Postgres in Docker for the test run | `org.testcontainers:postgresql` |
+| `Microsoft.Extensions.TimeProvider.Testing` | tests | `FakeTimeProvider`: a clock tests can set and move forward | A fixed `Clock` bean / `Clock.offset` |
+
+- `TimeProvider.Testing` is `10.10.0`, not `10.0.13`: it ships from a different Microsoft repo (`dotnet/extensions`) with its own version numbers. It still targets .NET 10.
+
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 2: Mark entities that have timestamps.</b></span></summary>
+
+**Run in:** `dotnet-todo/`.
+
+<details>
+<summary>Code to type: <code>dotnet-todo/src/TodoApi/Data/IHasTimestamps.cs</code></summary>
+
+```csharp
+namespace TodoApi.Data;
+
+// Entities with created_at / updated_at columns; AuditTimestampsInterceptor fills them
+public interface IHasTimestamps
+{
+    DateTimeOffset CreatedAt { get; set; }
+
+    DateTimeOffset UpdatedAt { get; set; }
+}
+```
+
+</details>
+
+- An interface with two properties. Any entity that implements it gets its timestamps filled in Step 3. Today that is only `Todo`.
+- C# interfaces can declare properties, not only methods. A class implements them with matching `{ get; set; }` properties.
+- Interface names start with `I` in .NET (`IHasTimestamps`, `IDisposable`). A convention, not a rule, but universal.
+
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 3: Write the timestamp interceptor.</b></span></summary>
+
+**Run in:** `dotnet-todo/`.
+
+<details>
+<summary>Code to type: <code>dotnet-todo/src/TodoApi/Data/AuditTimestampsInterceptor.cs</code></summary>
+
+```csharp
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+
+namespace TodoApi.Data;
+
+// Fills CreatedAt and UpdatedAt on save, like Spring Data's AuditingEntityListener
+public sealed class AuditTimestampsInterceptor(TimeProvider clock) : SaveChangesInterceptor
+{
+    public override InterceptionResult<int> SavingChanges(
+        DbContextEventData eventData,
+        InterceptionResult<int> result)
+    {
+        Stamp(eventData.Context);
+        return base.SavingChanges(eventData, result);
+    }
+
+    public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+        DbContextEventData eventData,
+        InterceptionResult<int> result,
+        CancellationToken cancellationToken = default)
+    {
+        Stamp(eventData.Context);
+        return base.SavingChangesAsync(eventData, result, cancellationToken);
+    }
+
+    private void Stamp(DbContext? context)
+    {
+        if (context is null)
+        {
+            return;
+        }
+
+        // Postgres keeps microseconds; drop .NET's extra 100 ns digit so the saved row and the object agree
+        var now = clock.GetUtcNow();
+        now = now.AddTicks(-(now.Ticks % 10));
+
+        foreach (var entry in context.ChangeTracker.Entries<IHasTimestamps>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = now;
+                entry.Entity.UpdatedAt = now;
+            }
+            else if (entry.State == EntityState.Modified)
+            {
+                entry.Entity.UpdatedAt = now;
+            }
+        }
+    }
+}
+```
+
+</details>
+
+- `SaveChangesInterceptor`: EF Core calls `SavingChanges` / `SavingChangesAsync` right before it writes to the database. Like a JPA `@PrePersist` / `@PreUpdate` listener, but for every entity in one place. This is what `AuditingEntityListener` does for you in Spring.
+- Two overrides because `SaveChanges()` and `SaveChangesAsync()` are separate paths. The app only uses the async one; the sync override keeps the interceptor correct if anything calls the sync one.
+- `ChangeTracker.Entries<IHasTimestamps>()`: every tracked entity that implements the interface, with its state. `Added` will become an `INSERT`, `Modified` an `UPDATE`. Hibernate's persistence context holds the same information.
+- `(TimeProvider clock)`: the interceptor asks DI for a clock instead of calling `DateTimeOffset.UtcNow`. Tests swap in a fake clock (Step 7). Spring: inject a `Clock` bean.
+- `AddTicks(-(now.Ticks % 10))`: a .NET tick is 100 ns; Postgres stores microseconds (10 ticks). Without this line the object in memory and the saved row differ in the last digit, and a later "did `created_at` change?" check fails. Step 9's tests catch it if you remove the line.
+- `return base.SavingChanges(...)`: let EF Core continue with the save. Like `chain.doFilter(...)` in a servlet filter.
+- `override`: C# requires the keyword to replace a base method. Java's `@Override` is optional; C# fails to compile without it.
+
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 4: Give `Todo` the interface.</b></span></summary>
+
+**Run in:** `dotnet-todo/`. Two changes: a `using` line at the top and `: IHasTimestamps` after the class name.
+
+<details>
+<summary>Code to type: <code>dotnet-todo/src/TodoApi/Todos/Todo.cs</code> (full file)</summary>
+
+```csharp
+using TodoApi.Data;
+
+namespace TodoApi.Todos;
+
+public sealed class Todo : IHasTimestamps
+{
+    public long Id { get; set; }
+
+    public required string Title { get; set; }
+
+    public string? Description { get; set; }
+
+    public bool Completed { get; set; }
+
+    public DateOnly? DueDate { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+```
+
+</details>
+
+- `: IHasTimestamps` is `implements IHasTimestamps`. C# uses `:` for both `extends` and `implements`; the base class, if any, comes first.
+- `using TodoApi.Data;` imports the namespace, like a Java package import.
+- No new migration: the columns already exist. Check with `dotnet ef migrations has-pending-model-changes --project src/TodoApi`. Expect: `No changes have been made to the model since the last migration.`
+
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 5: Register the clock, the interceptor and the database health check.</b></span></summary>
+
+**Run in:** `dotnet-todo/`.
+
+<details>
+<summary>Code to type: <code>dotnet-todo/src/TodoApi/Program.cs</code> (full file)</summary>
+
+```csharp
+using Microsoft.EntityFrameworkCore;
+using Scalar.AspNetCore;
+using TodoApi.Data;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<AuditTimestampsInterceptor>();
+builder.Services.AddDbContext<TodoDbContext>((services, options) =>
+    options
+        .UseNpgsql(builder.Configuration.GetConnectionString("Todo"))
+        .UseSnakeCaseNamingConvention()
+        .AddInterceptors(services.GetRequiredService<AuditTimestampsInterceptor>()));
+
+builder.Services.AddProblemDetails();
+builder.Services.AddOpenApi();
+builder.Services.AddHealthChecks().AddDbContextCheck<TodoDbContext>();
+
+var app = builder.Build();
+
+app.UseExceptionHandler();
+app.UseStatusCodePages();
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+    app.MapScalarApiReference();
+}
+
+app.MapHealthChecks("/health");
+
+app.Run();
+```
+
+</details>
+
+```bash
+dotnet build
+```
+
+- Expect: `0 Warning(s)`. Do not run `dotnet test` yet: the old health test now needs a database, and Steps 7-8 give it one.
+- `AddSingleton(TimeProvider.System)`: one real clock for the whole app.
+- `AddSingleton<AuditTimestampsInterceptor>()`: one interceptor; it holds no per-request state, so a singleton is safe. DI builds it and passes the `TimeProvider` to its constructor.
+- `AddDbContext<TodoDbContext>((services, options) => ...)`: this overload also hands you the DI container (`services`), so you can fetch the interceptor and attach it with `AddInterceptors`. Like wiring a listener bean into an `EntityManagerFactory`.
+- `AddDbContextCheck<TodoDbContext>()`: `/health` now runs a `SELECT 1` through the `DbContext`. Database down → `Unhealthy` with HTTP 503.
+
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 6: Try the health check by hand.</b></span></summary>
+
+**Run in:** `dotnet-todo/`, terminal 1.
+
+```bash
+dotnet run --project src/TodoApi
+```
+
+In terminal 2 (any folder):
+
+```bash
+curl -s -w ' %{http_code}\n' localhost:5080/health
+docker stop todo-db
+curl -s -w ' %{http_code}\n' localhost:5080/health
+docker start todo-db
+```
+
+- Expect: `Healthy 200`, then `Unhealthy 503` (terminal 1 logs `Failed executing DbCommand ... SELECT 1`), then healthy again once the container is back (a few seconds).
+- `docker stop` pauses the Spring and Rails apps' database too. `docker start` brings it back with all data.
+- Stop the app with `Ctrl-C`.
+
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 7: Write the test fixture.</b></span></summary>
+
+**Run in:** `dotnet-todo/`. Docker must be running.
+
+<details>
+<summary>Code to type: <code>dotnet-todo/tests/TodoApi.Tests/TodoApiFactory.cs</code></summary>
+
+```csharp
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Time.Testing;
+using Testcontainers.PostgreSql;
+using TodoApi.Data;
+
+[assembly: AssemblyFixture(typeof(TodoApi.Tests.TodoApiFactory))]
+
+namespace TodoApi.Tests;
+
+// One Postgres container and one app for the whole test run, like a Spring test context with Testcontainers
+public sealed class TodoApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
+{
+    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:18-alpine").Build();
+
+    // 7 ticks past a whole microsecond, like a real clock reading; Postgres stores only microseconds
+    public FakeTimeProvider Clock { get; } = new(new DateTimeOffset(2026, 10, 1, 9, 0, 0, TimeSpan.Zero).AddTicks(7));
+
+    public async ValueTask InitializeAsync()
+    {
+        await _postgres.StartAsync();
+
+        await using var scope = Services.CreateAsyncScope();
+        await scope.ServiceProvider.GetRequiredService<TodoDbContext>().Database.MigrateAsync();
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        await base.DisposeAsync();
+        await _postgres.DisposeAsync();
+    }
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.UseSetting("ConnectionStrings:Todo", _postgres.GetConnectionString());
+        builder.ConfigureTestServices(services => services.AddSingleton<TimeProvider>(Clock));
+    }
+}
+```
+
+</details>
+
+- `WebApplicationFactory<Program>`: the in-memory app from US-1.3, now subclassed so you can change its setup. Spring: `@SpringBootTest` plus `@DynamicPropertySource`.
+- `[assembly: AssemblyFixture(...)]`: xUnit v3 creates **one** `TodoApiFactory` for the whole test run and hands it to any test class that asks for it in its constructor. One container, one app, many test classes. Spring caches the test context the same way.
+- `IAsyncLifetime`: `InitializeAsync` runs once before the first test, `DisposeAsync` after the last. `@BeforeAll` / `@AfterAll` that can `await`.
+- `InitializeAsync`: start the container, then run the migrations from US-2.1 against it. Same SQL as your dev database, so tests check the real schema. Spring with Flyway does this on context start.
+- `ConfigureWebHost` runs while the app is built:
+  - `UseSetting("ConnectionStrings:Todo", ...)` points the app at the container. It wins over `ConnectionStrings__Todo` from mise. Checked: with the variable set to a nonexistent host, all tests still pass, so tests never touch `todo_dotnet`. Validate row 3 shows it on your machine.
+  - `ConfigureTestServices(...)` replaces the real `TimeProvider` with `Clock`. Spring: `@TestConfiguration` with a `@Primary Clock`.
+- `FakeTimeProvider` starts at a fixed time and only moves when a test calls `Advance`. The 7 extra ticks make it a realistic reading, so the microsecond trim in Step 3 is tested.
+- `"postgres:18-alpine"`: the same image as `compose.yml`. The first run pulls it.
+- `private readonly ... _postgres`: `_camelCase` is the .NET convention for private fields. `readonly` is `final`.
+
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 8: Point the health test at the fixture.</b></span></summary>
+
+**Run in:** `dotnet-todo/`.
+
+<details>
+<summary>Code to type: <code>dotnet-todo/tests/TodoApi.Tests/HealthTests.cs</code> (full file)</summary>
+
+```csharp
+using System.Net;
+
+namespace TodoApi.Tests;
+
+public sealed class HealthTests(TodoApiFactory factory)
+{
+    [Fact]
+    public async Task HealthReturnsHealthy()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync(new Uri("/health", UriKind.Relative), cancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("Healthy", await response.Content.ReadAsStringAsync(cancellationToken));
+    }
+}
+```
+
+</details>
+
+- Two changes from US-1.3: the constructor takes `TodoApiFactory` instead of `WebApplicationFactory<Program>`, and `: IClassFixture<...>` is gone. The assembly fixture replaces the class fixture.
+- `using Microsoft.AspNetCore.Mvc.Testing;` is gone too. Keeping it fails the build with `IDE0005: Using directive is unnecessary`: the `.editorconfig` rule from US-1.3 at work.
+
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 9: Write the persistence tests.</b></span></summary>
+
+**Run in:** `dotnet-todo/`.
+
+<details>
+<summary>Code to type: <code>dotnet-todo/tests/TodoApi.Tests/TodoPersistenceTests.cs</code></summary>
+
+```csharp
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
+using TodoApi.Data;
+using TodoApi.Todos;
+
+namespace TodoApi.Tests;
+
+public sealed class TodoPersistenceTests(TodoApiFactory factory) : IAsyncLifetime
+{
+    private readonly CancellationToken _cancellationToken = TestContext.Current.CancellationToken;
+    private AsyncServiceScope _scope;
+    private TodoDbContext _db = null!;
+
+    public ValueTask InitializeAsync()
+    {
+        _scope = factory.Services.CreateAsyncScope();
+        _db = _scope.ServiceProvider.GetRequiredService<TodoDbContext>();
+        return ValueTask.CompletedTask;
+    }
+
+    public ValueTask DisposeAsync() => _scope.DisposeAsync();
+
+    [Fact]
+    public async Task SavesWithDefaultsAndTimestamps()
+    {
+        var todo = new Todo { Title = "Buy milk" };
+
+        _db.Todos.Add(todo);
+        await _db.SaveChangesAsync(_cancellationToken);
+
+        var saved = await ReloadAsync(todo.Id);
+        Assert.True(saved.Id > 0);
+        Assert.False(saved.Completed);
+        Assert.Null(saved.Description);
+        Assert.Equal(todo.CreatedAt, saved.CreatedAt);
+        Assert.Equal(factory.Clock.GetUtcNow(), saved.CreatedAt, TimeSpan.FromMicroseconds(1));
+        Assert.Equal(saved.CreatedAt, saved.UpdatedAt);
+    }
+
+    [Fact]
+    public async Task UpdateChangesUpdatedAtButNotCreatedAt()
+    {
+        var todo = new Todo { Title = "Buy milk" };
+        _db.Todos.Add(todo);
+        await _db.SaveChangesAsync(_cancellationToken);
+        var createdAt = todo.CreatedAt;
+
+        factory.Clock.Advance(TimeSpan.FromMinutes(1));
+        todo.Title = "Buy oat milk";
+        await _db.SaveChangesAsync(_cancellationToken);
+
+        var saved = await ReloadAsync(todo.Id);
+        Assert.Equal(createdAt, saved.CreatedAt);
+        Assert.Equal(createdAt.AddMinutes(1), saved.UpdatedAt);
+    }
+
+    [Fact]
+    public async Task DatabaseRejectsTitleOver200Characters()
+    {
+        _db.Todos.Add(new Todo { Title = new string('a', 201) });
+
+        var error = await Assert.ThrowsAsync<DbUpdateException>(() => _db.SaveChangesAsync(_cancellationToken));
+
+        var postgres = Assert.IsType<PostgresException>(error.InnerException);
+        Assert.Equal(PostgresErrorCodes.StringDataRightTruncation, postgres.SqlState);
+    }
+
+    [Fact]
+    public async Task DatabaseRejectsNullTitle()
+    {
+        _db.Todos.Add(new Todo { Title = null! });
+
+        var error = await Assert.ThrowsAsync<DbUpdateException>(() => _db.SaveChangesAsync(_cancellationToken));
+
+        var postgres = Assert.IsType<PostgresException>(error.InnerException);
+        Assert.Equal(PostgresErrorCodes.NotNullViolation, postgres.SqlState);
+    }
+
+    [Fact]
+    public async Task BlankTitleIsSavedBecauseValidationLivesAtTheHttpBoundary()
+    {
+        var todo = new Todo { Title = "   " };
+
+        _db.Todos.Add(todo);
+        await _db.SaveChangesAsync(_cancellationToken);
+
+        Assert.Equal("   ", (await ReloadAsync(todo.Id)).Title);
+    }
+
+    // A fresh query, not the tracked object, so the asserts read what Postgres stored
+    private Task<Todo> ReloadAsync(long id) =>
+        _db.Todos.AsNoTracking().SingleAsync(todo => todo.Id == id, _cancellationToken);
+}
+```
+
+</details>
+
+```bash
+dotnet test
+```
+
+- Expect: `Passed!`, `total: 6` (1 health + 5 persistence). The first run takes longer while Docker pulls `postgres:18-alpine`.
+- These are repository-level tests: no HTTP, just the `DbContext` against real Postgres. Spring's `@DataJpaTest` with Testcontainers.
+- `factory.Services.CreateAsyncScope()`: a `DbContext` is scoped (one per request). Outside a request, you open a scope yourself to get one. `DisposeAsync` closes it after each test.
+- xUnit creates a **new instance of the test class for every test**, so `_scope` and `_db` are fresh each time. JUnit 5 does the same by default.
+- `null!` tells the compiler "I know this is null"; it silences the nullable warning so the test can send a `NULL` to the database on purpose.
+- `Assert.ThrowsAsync<DbUpdateException>(...)`: `assertThrows`. EF wraps the database error; `InnerException` is the `PostgresException` with the SQL state code (`22001` too long, `23502` not null).
+- `AsNoTracking()` in `ReloadAsync`: a fresh read from Postgres, not the object EF already has in memory. Without it you would test the object, not the row.
+
+| Test | What it proves | Rails / Spring parallel |
+| --- | --- | --- |
+| `SavesWithDefaultsAndTimestamps` | `id` generated, `completed` false, both timestamps from the clock, equal on insert | Rails `t.timestamps`; Spring `@CreatedDate` |
+| `UpdateChangesUpdatedAtButNotCreatedAt` | `Clock.Advance(1 minute)` moves `updated_at` only | Rails `travel 1.minute` |
+| `DatabaseRejectsTitleOver200Characters` | `varchar(200)` is enforced by Postgres | Same as both |
+| `DatabaseRejectsNullTitle` | `NOT NULL` is enforced by Postgres | Rails `NotNullViolation` in the console (US-2.2 of the Rails plan) |
+| `BlankTitleIsSavedBecauseValidationLivesAtTheHttpBoundary` | EF Core does **not** validate on save; `"   "` is stored | Spring behaves the same; Rails would reject it in the model |
+
+- Checked: removing the `AddTicks` line or the `AddInterceptors` call makes the two timestamp tests fail.
+
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: #9999FF;"><b>Step 10: Check and commit.</b></span></summary>
+
+**Run in:** `dotnet-todo/`.
+
+```bash
+dotnet build
+dotnet test
+dotnet format --verify-no-changes
+dotnet package list --vulnerable --include-transitive
+```
+
+Then **Run in:** repo root (`learn-ruby-thru-spring/`).
+
+```bash
+git add dot-net-todo.md dotnet-todo
+git commit -m "US-2.2 audit timestamps, DB health check, Testcontainers tests"
+```
+
+**Checklist**
+
+- [ ] `IHasTimestamps` + `AuditTimestampsInterceptor` fill `created_at` / `updated_at` from `TimeProvider`
+- [ ] `/health` checks the database: 200 when up, 503 when down
+- [ ] One Postgres container per test run through an xUnit assembly fixture; migrations applied to it
+- [ ] Persistence tests pass; tests ignore the dev database
+- [ ] Build, test, format and audit clean
+
+**What to notice:** Spring gives you auditing as a switch (`@EnableJpaAuditing`); EF Core gives you a hook (`SaveChangesInterceptor`) and you write the 30 lines. The entity has no validation at all: in .NET, as in Spring, rules like "title not blank" belong to the HTTP request type (Phase 3), and the database is the last line of defense.
+
+</details>
+
+---
+
+<details>
+<summary><span style="font-weight: bold; color: pink;"><b>Validate</b></span></summary>
+
+**Run in:** `dotnet-todo/`. Docker running, `todo-db` up.
+
+| # | Command | Expect |
+| --- | --- | --- |
+| 1 | `dotnet build` | `0 Warning(s)`, `0 Error(s)` |
+| 2 | `dotnet test` | `Passed!`, `total: 6` |
+| 3 | `docker exec todo-db sh -c 'psql -U "$POSTGRES_USER" -d todo_dotnet -Atc "select count(*) from todos"'` before and after `dotnet test` | the same number both times: the tests' inserts went to their own container, not `todo_dotnet` |
+| 4 | `dotnet ef migrations has-pending-model-changes --project src/TodoApi` | `No changes have been made to the model since the last migration.` |
+| 5 | `dotnet format --verify-no-changes; echo $?` | `0` |
+| 6 | `dotnet run --project src/TodoApi` (terminal 1), then `curl -s -w ' %{http_code}\n' localhost:5080/health` (terminal 2) | `Healthy 200` |
+| 7 | `docker stop todo-db`, the same `curl`, then `docker start todo-db` | `Unhealthy 503` |
+
+</details>
 
 </details>
 
