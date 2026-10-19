@@ -41,8 +41,8 @@ Most Spring concepts have a direct Rails counterpart; the big shift is from expl
 | You know (Spring / Java / Gradle) | Rails / Ruby equivalent | Key difference |
 | --- | --- | --- |
 | `build.gradle.kts` + version catalog | `Gemfile` + `Gemfile.lock` | Lockfile is always committed; no plugin model |
-| `./gradlew bootRun`, `./gradlew test` | `bin/rails server`, `bin/rails test` | `bin/rails` is your task runner (like Gradle tasks) |
-| Gradle custom tasks | Rake tasks (`lib/tasks/*.rake`) | `bin/rails -T` lists them like `./gradlew tasks` |
+| `./gradlew bootRun`, `./gradlew test` | `rails server`, `rails test` | `rails` is your task runner (like Gradle tasks) |
+| Gradle custom tasks | Rake tasks (`lib/tasks/*.rake`) | `rails -T` lists them like `./gradlew tasks` |
 | SDKMAN / toolchains | mise, rbenv or asdf + `.ruby-version` | Version file at repo root pins Ruby |
 | start.spring.io | `rails new` | Generator writes far more files for you |
 | `application.yml` + profiles | `config/database.yml`, `config/environments/*.rb`, credentials | Environment = profile (`RAILS_ENV`) |
@@ -249,7 +249,7 @@ rails -v
 
 - Expect: `Rails 8.1.x`.
 - If missing: `gem install rails -v "~> 8.1"`, then `mise reshim` so the new `rails` command is on PATH.
-- Why: the global `rails` command has one job here: `rails new`. Inside the app, always run `bin/rails`. It uses the Rails version locked in `Gemfile.lock`. Same idea as start.spring.io once, then `./gradlew` forever.
+- Why: the global `rails` command has one job here: `rails new`. Inside the app, always run `rails`. It uses the Rails version locked in `Gemfile.lock`. Same idea as start.spring.io once, then `./gradlew` forever.
 
 </details>
 
@@ -327,7 +327,7 @@ Run from repo root.
 | 5 | `cd ~ && echo "[$POSTGRES_USER]"; cd -` | `[]`: vars load only inside the repo |
 | 6 | `git ls-files mise.toml` | `mise.toml` |
 
-- Make targets load `.env` on their own. Steps 4 and 5 check mise, which you need when you run `bin/rails` directly.
+- Make targets load `.env` on their own. Steps 4 and 5 check mise, which you need when you run `rails` directly.
 
 </details>
 
@@ -425,13 +425,13 @@ test:
 
 ```bash
 cd rails-todo
-bin/rails db:prepare
-bin/rails runner 'puts ActiveRecord::Base.connection.current_database'
+rails db:prepare
+rails runner 'puts ActiveRecord::Base.connection.current_database'
 ```
 
 - Expect: no error, then `todo_rails_development`.
 - Why: `db:prepare` creates the DB if missing, runs pending migrations and seeds. Safe to run again. Like Flyway on startup, but you run it.
-- `bin/rails runner` runs one line of Ruby inside the booted app.
+- `rails runner` runs one line of Ruby inside the booted app.
 - `connection refused`: container down. From repo root: `docker compose up -d --wait`.
 - `fe_sendauth: no password supplied`: env not loaded. Redo US-1.3 Steps 1 and 4.
 
@@ -456,7 +456,7 @@ end
 ```
 
 ```bash
-bin/rails test
+rails test
 ```
 
 - Expect: `1 runs, 1 assertions, 0 failures`.
@@ -472,7 +472,7 @@ bin/rails test
 <summary><span style="font-weight: bold; color: #9999FF;"><b>Step 7: Boot the server.</b></span></summary>
 
 ```bash
-bin/rails server
+rails server
 ```
 
 In a second terminal:
@@ -550,12 +550,12 @@ git commit -m "US-1.4 Rails skeleton"
 **Checklist**
 
 - [x] `rails new` with `--api --database=postgresql --skip-kamal`; nested `.git` removed
-- [x] `database.yml` reads host, port, user and password from `ENV`; `bin/rails db:prepare` succeeds
+- [x] `database.yml` reads host, port, user and password from `ENV`; `rails db:prepare` succeeds
 - [x] Smoke test passes; `GET /up` returns 200
 - [x] `bin/rubocop`, `bin/brakeman`, `bin/bundler-audit` clean
 - [x] Folder map written in `LEARNINGS.md`
 
-**What to notice:** Rails generated a health check, lint, security scans and CI config without asking. `Gemfile` vs `build.gradle.kts`: no plugins, no tasks, only dependencies; tasks live in `bin/rails`. Run `bin/rails -T` to list them, like `./gradlew tasks`.
+**What to notice:** Rails generated a health check, lint, security scans and CI config without asking. `Gemfile` vs `build.gradle.kts`: no plugins, no tasks, only dependencies; tasks live in `rails`. Run `rails -T` to list them, like `./gradlew tasks`.
 
 </details>
 
@@ -621,7 +621,7 @@ end
 **Step 2: Generate the migration.**
 
 ```bash
-bin/rails generate migration CreateTodos title:string description:text completed:boolean due_date:date
+rails generate migration CreateTodos title:string description:text completed:boolean due_date:date
 ```
 
 - Expect: `db/migrate/<timestamp>_create_todos.rb`.
@@ -660,7 +660,7 @@ end
 **Step 4: Run the migration.**
 
 ```bash
-bin/rails db:migrate
+rails db:migrate
 cat db/schema.rb
 ```
 
@@ -679,10 +679,10 @@ docker exec -it todo-db sh -c 'psql -U "$POSTGRES_USER" -d todo_rails_developmen
 **Step 6: Practice rollback.**
 
 ```bash
-bin/rails db:migrate:status
-bin/rails db:rollback
-bin/rails db:migrate:status
-bin/rails db:migrate
+rails db:migrate:status
+rails db:rollback
+rails db:migrate:status
+rails db:migrate
 ```
 
 - Expect: status `up`, then `down`, then `up` again. Run Step 5's `\d todos` while it is down: the table is gone.
@@ -750,14 +750,14 @@ class Todo < ApplicationRecord
 end
 ```
 
-- Why: no generator, so you see how little is needed. `bin/rails g model` would write the model, migration, test and fixture in one go.
+- Why: no generator, so you see how little is needed. `rails g model` would write the model, migration, test and fixture in one go.
 - File name is the snake_case class name. The Zeitwerk autoloader requires it, like Java's one-public-class-per-file rule.
 - Class `Todo` maps to table `todos` by naming convention. No `@Table`.
 
 **Step 2: Explore in the console.**
 
 ```bash
-bin/rails console
+rails console
 ```
 
 Try each line and read the SQL in the output:
@@ -846,8 +846,8 @@ file_taxes:
 - Test syntax: `test "description" do ... end`.
 
 ```bash
-bin/rails test test/models/todo_test.rb
-bin/rails test
+rails test test/models/todo_test.rb
+rails test
 ```
 
 <details>
@@ -1000,7 +1000,7 @@ end
 ```
 
 ```bash
-bin/rails routes -g todos
+rails routes -g todos
 ```
 
 - Expect: `POST /api/todos` to `api/todos#create`, and `GET /api/todos/:id` to `api/todos#show`, with helper names `api_todos` and `api_todo`.
@@ -1027,7 +1027,7 @@ end
 **Step 2: Generate the controller.**
 
 ```bash
-bin/rails generate controller Api::Todos
+rails generate controller Api::Todos
 ```
 
 - Expect: `app/controllers/api/todos_controller.rb` (empty class) and `test/controllers/api/todos_controller_test.rb`.
@@ -1183,7 +1183,7 @@ end
 </details>
 
 - `do ... end` after `assert_difference` is a block. Rails counts `Todo.count` before and after the block runs.
-- Expect: `bin/rails test` shows 10 runs, 0 failures (6 earlier tests plus 4 new ones).
+- Expect: `rails test` shows 10 runs, 0 failures (6 earlier tests plus 4 new ones).
 
 **Step 8: Add API docs (OpenAPI).** Rails has no built-in Swagger. Use the `oas_rails` gem: it builds an OpenAPI 3.x document from your routes, models and YARD comments, and serves an interactive UI (RapiDoc). It works with Minitest. The popular `rswag` gem needs RSpec, so it does not fit this project.
 
@@ -1193,7 +1193,7 @@ end
 bundle add oas_rails
 ```
 
-**8.2 Write the initializer.** `bin/rails generate oas_rails:config` writes a long sample file. Write this short version by hand instead.
+**8.2 Write the initializer.** `rails generate oas_rails:config` writes a long sample file. Write this short version by hand instead.
 
 <details>
 <summary>Code to type: <code>config/initializers/oas_rails.rb</code></summary>
@@ -1261,7 +1261,7 @@ end
 - Known gap: the `Todo` schema lists columns but leaves out `created_at` and `updated_at`. The real response still has them.
 - **Security:** both apps serve docs to anyone. Before a public deploy, turn them off: Spring `springdoc.api-docs.enabled: false` and `springdoc.swagger-ui.enabled: false` in the production profile; Rails `mount OasRails::Engine => "/docs" unless Rails.env.production?`.
 
-**Step 9: Finish.** `bin/rails test`, `bin/rubocop` and `bin/brakeman` green. Commit.
+**Step 9: Finish.** `rails test`, `bin/rubocop` and `bin/brakeman` green. Commit.
 
 **What to notice:** strong parameters replace the request DTO. `todo.save` returns true or false; `save!` raises. Validation runs at the controller boundary in Spring and in the model in Rails.
 
@@ -1327,7 +1327,7 @@ end
 
 **Rails track**
 
-**Step 1: Add the `index` route.** Change `only:` to `%i[index show create]`. Run `bin/rails routes -g todos` to check.
+**Step 1: Add the `index` route.** Change `only:` to `%i[index show create]`. Run `rails routes -g todos` to check.
 
 <details>
 <summary>Code to type: <code>config/routes.rb</code></summary>
@@ -1591,7 +1591,7 @@ file_taxes:
 
 - `body["items"].map { |todo| todo["title"] }` collects the titles, like `stream().map(...).toList()`.
 - `999_999`: underscores in number literals are allowed, like Java's `999_999`.
-- Expect: `bin/rails test` shows 16 runs, 0 failures.
+- Expect: `rails test` shows 16 runs, 0 failures.
 
 **Step 7: Replace hand pagination with pagy.** This repo's `rails-todo` uses pagy for `index`. Step 5's hand version is still worth writing first: it shows what pagy does for you.
 
@@ -1686,7 +1686,7 @@ end
 
 </details>
 
-- Expect: `bin/rails test` shows 17 runs, 0 failures; `bin/rubocop` clean. Step 6's list tests pass unchanged: the contract did not move.
+- Expect: `rails test` shows 17 runs, 0 failures; `bin/rubocop` clean. Step 6's list tests pass unchanged: the contract did not move.
 - The log shows the same two queries as the hand version: `SELECT COUNT(*)`, then `SELECT ... LIMIT 20 OFFSET 0`.
 
 **Pagy next to Spring Data**
@@ -1779,7 +1779,7 @@ This app keeps them inline: one paged endpoint, everything visible in one place.
 
 **Rails track**
 
-**Step 1: Add the `update` route.** Add `update` to `only:`. `bin/rails routes -g todos` now shows both `PATCH` and `PUT` for `update`. Rails maps both to one action.
+**Step 1: Add the `update` route.** Add `update` to `only:`. `rails routes -g todos` now shows both `PATCH` and `PUT` for `update`. Rails maps both to one action.
 
 **Step 2: Extract a shared lookup.** Add to the top of `Api::TodosController`:
 
@@ -1966,7 +1966,7 @@ todo.save
 
 - `travel 1.minute do ... end` runs the block with the clock moved forward, then restores it.
 - `assert_operator a, :>, b` asserts `a > b` and prints both values on failure.
-- Expect: `bin/rails test` shows 22 runs, 0 failures (21 if you kept Step 5's hand pagination instead of pagy).
+- Expect: `rails test` shows 22 runs, 0 failures (21 if you kept Step 5's hand pagination instead of pagy).
 
 **What to notice:** `before_action` handles cross-cutting code. Both stacks track changes: Hibernate dirty checking vs Active Record `changed?` / `saved_changes`.
 
@@ -2023,7 +2023,7 @@ todo.save
 
 **Rails track**
 
-**Step 1: Open all routes.** Replace the `only:` list with plain `resources :todos`. Run `bin/rails routes -g todos`. API mode skips the HTML-only `new` and `edit` routes, so you get exactly five actions.
+**Step 1: Open all routes.** Replace the `only:` list with plain `resources :todos`. Run `rails routes -g todos`. API mode skips the HTML-only `new` and `edit` routes, so you get exactly five actions.
 
 **Step 2: Add `destroy` to `before_action`.** The `only:` list becomes `%i[show update destroy]`. The 404 case is now handled for free.
 
@@ -2186,9 +2186,9 @@ Todo.where(title: "b").delete_all
 </details>
 
 - `assert_empty response.body` checks that 204 sends no body.
-- Expect: `bin/rails test` shows 24 runs, 0 failures (23 if you kept Step 5's hand pagination instead of pagy).
+- Expect: `rails test` shows 24 runs, 0 failures (23 if you kept Step 5's hand pagination instead of pagy).
 
-**What to notice:** `resources :todos` now replaces five mapping annotations. Read the `bin/rails routes` table it generated.
+**What to notice:** `resources :todos` now replaces five mapping annotations. Read the `rails routes` table it generated.
 
 <details>
 <summary><span style="font-weight: bold; color: pink;"><b>Validate</b></span></summary>
@@ -2227,7 +2227,7 @@ A story is done only when both tracks meet the same bar; this keeps the comparis
 **Definition of done (every story, both tracks)**
 
 - [ ] Acceptance criteria covered by request-level tests against real Postgres
-- [ ] `./gradlew build` and `bin/rails test` green; Spotless, `bin/rubocop` and `bin/brakeman` clean
+- [ ] `./gradlew build` and `rails test` green; Spotless, `bin/rubocop` and `bin/brakeman` clean
 - [ ] Schema changes only through a new migration, never by editing an applied one
 - [ ] Same request in `requests.http` returns the same status and JSON shape from both apps
 - [ ] One short note per story in `LEARNINGS.md`: what was easier, what was surprising
@@ -2240,7 +2240,7 @@ A story is done only when both tracks meet the same bar; this keeps the comparis
 - Rails: follow the generators' naming (`Todo` model, `todos` table, `Api::TodosController`), skinny controllers, `params.expect` with separate create and update parameter methods, `before_action` for shared lookups, `rescue_from` for errors, fixtures for test data, no service objects until a model method gets too big
 - Both: one commit per story per track, small focused PRs if you use GitHub, and a CI workflow. Rails generated one in `rails-todo/.github/workflows/ci.yml`; move it to the repo-root `.github/workflows/`, set `working-directory: rails-todo`, and add the equivalent Gradle job
 
-**After this plan:** add user accounts with Rails 8's built-in authentication generator (`bin/rails generate authentication`) and compare it with Spring Security; then deploy each app to compare packaging (fat JAR or container vs Kamal).
+**After this plan:** add user accounts with Rails 8's built-in authentication generator (`rails generate authentication`) and compare it with Spring Security; then deploy each app to compare packaging (fat JAR or container vs Kamal).
 
 </details>
 

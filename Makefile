@@ -126,22 +126,22 @@ rails-install: rails-exists ## Install gems (bundle install)
 	cd $(RAILS_DIR) && bundle install
 
 rails-db-prepare: rails-exists ## Create and migrate the dev DB if needed
-	cd $(RAILS_DIR) && bin/rails db:prepare
+	cd $(RAILS_DIR) && rails db:prepare
 
 rails-db-migrate: rails-exists ## Run pending migrations
-	cd $(RAILS_DIR) && bin/rails db:migrate
+	cd $(RAILS_DIR) && rails db:migrate
 
 rails-db-rollback: rails-exists ## Roll back the last migration
-	cd $(RAILS_DIR) && bin/rails db:rollback
+	cd $(RAILS_DIR) && rails db:rollback
 
 rails-db-status: rails-exists ## Show migration status (up/down)
-	cd $(RAILS_DIR) && bin/rails db:migrate:status
+	cd $(RAILS_DIR) && rails db:migrate:status
 
 rails-db: rails-exists ## Print the database Rails connects to
-	@cd $(RAILS_DIR) && bin/rails runner 'puts ActiveRecord::Base.connection.current_database'
+	@cd $(RAILS_DIR) && rails runner 'puts ActiveRecord::Base.connection.current_database'
 
 rails-test: rails-exists ## Run tests; one file with T=test/models/todo_test.rb
-	cd $(RAILS_DIR) && bin/rails test $(T)
+	cd $(RAILS_DIR) && rails test $(T)
 
 rails-lint: rails-exists ## RuboCop
 	cd $(RAILS_DIR) && bin/rubocop
@@ -153,13 +153,13 @@ rails-security: rails-exists ## Brakeman and bundler-audit
 	cd $(RAILS_DIR) && bin/brakeman --no-pager -q && bin/bundler-audit
 
 rails-run: rails-exists rails-db-migrate ## Start the server on port 3000 (Ctrl-C to stop)
-	cd $(RAILS_DIR) && bin/rails server
+	cd $(RAILS_DIR) && rails server
 
 rails-console: rails-exists ## Open the Rails console
-	cd $(RAILS_DIR) && bin/rails console
+	cd $(RAILS_DIR) && rails console
 
 rails-routes: rails-exists ## Show the todo routes
-	cd $(RAILS_DIR) && bin/rails routes -g todos
+	cd $(RAILS_DIR) && rails routes -g todos
 
 rails-health: ## Call /up
 	@curl -s -o /dev/null -w "GET /up -> %{http_code}\n" localhost:3000/up
@@ -170,7 +170,7 @@ rails-docs: ## Open the oas_rails API docs (server must be running)
 rails-check: rails-test rails-lint rails-security ## Tests, lint and security scans
 
 rails-dep: rails-exists ## Deploy the app to the cloud
-	cd $(RAILS_DIR) && bin/rails -T
+	cd $(RAILS_DIR) && rails -T
 
 ruby-drill: ## Run the Ruby drill
 	ruby ./playground/irb_drill.rb
